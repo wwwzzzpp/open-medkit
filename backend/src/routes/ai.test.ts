@@ -211,6 +211,53 @@ describe('POST /api/ai/query', () => {
     expect(transaction.source).toBe('ai');
   });
 
+  it('deducts nearest-expiring batches first for inventory decrease commands', async () => {
+    testDb
+      .prepare(
+        `INSERT INTO medicines (name, spec, quantity, category) VALUES (?, ?, ?, ?)`,
+      )
+      .run('噻呋酰胺戊唑醇', '32%，100g/瓶', '5瓶', '杀菌剂');
+    testDb
+      .prepare(
+        `INSERT INTO inventory_batches (medicine_id, batch_no, quantity, expires_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(1, '近效期批次', '1瓶', '2026-06-01');
+    testDb
+      .prepare(
+        `INSERT INTO inventory_batches (medicine_id, batch_no, quantity, expires_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(1, '远效期批次', '4瓶', '2027-06-01');
+
+    const app = createApp();
+    const res = await app.request('/api/ai/query', {
+      method: 'POST',
+      headers: AI_HEADERS,
+      body: JSON.stringify({ question: '噻呋酰胺戊唑醇 库存减掉2瓶。' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.answer).toContain('批次扣减');
+    expect(body.data.medicines[0].quantity).toBe('3瓶');
+
+    const batches = testDb
+      .prepare('SELECT batch_no, quantity FROM inventory_batches ORDER BY expires_at ASC')
+      .all() as Array<{ batch_no: string; quantity: string }>;
+    expect(batches).toEqual([
+      { batch_no: '近效期批次', quantity: '0瓶' },
+      { batch_no: '远效期批次', quantity: '3瓶' },
+    ]);
+
+    const transaction = testDb
+      .prepare('SELECT * FROM inventory_transactions WHERE medicine_id = ?')
+      .get(1) as { reason: string; note: string; quantity_delta: string };
+    expect(transaction.reason).toContain('近效期批次优先');
+    expect(transaction.note).toContain('近效期批次 1瓶→0瓶');
+    expect(transaction.quantity_delta).toBe('-2瓶');
+  });
+
   it('calls AI for non-inventory questions with medicines in DB', async () => {
     testDb
       .prepare(

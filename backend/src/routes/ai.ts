@@ -43,10 +43,91 @@ import { recordInventoryTransaction } from '../services/inventory-transactions';
 
 export const aiRouter = new Hono<AiEnv>();
 
+interface InventoryBatchRecord {
+  id: number;
+  batch_no: string | null;
+  quantity: string | null;
+  expires_at: string | null;
+}
+
 function formatMedicineName(medicine: Medicine) {
   return medicine.brand && medicine.brand !== medicine.name
     ? `${medicine.brand} · ${medicine.name}`
     : medicine.name;
+}
+
+function loadBatchesForDeduction(medicineId: number) {
+  const db = getDb();
+  return db
+    .prepare(
+      `
+        SELECT id, batch_no, quantity, expires_at
+        FROM inventory_batches
+        WHERE medicine_id = ?
+        ORDER BY
+          CASE WHEN expires_at IS NULL OR expires_at = '' THEN 1 ELSE 0 END ASC,
+          expires_at ASC,
+          id ASC
+      `,
+    )
+    .all(medicineId) as InventoryBatchRecord[];
+}
+
+function buildBatchDeductions(
+  batches: InventoryBatchRecord[],
+  requestedAmount: number,
+  unit: string,
+) {
+  if (batches.length === 0) {
+    return { deductions: [] as Array<{ batch: InventoryBatchRecord; before: string; after: string; amount: number }> };
+  }
+
+  let remaining = requestedAmount;
+  const deductions: Array<{ batch: InventoryBatchRecord; before: string; after: string; amount: number }> = [];
+
+  for (const batch of batches) {
+    if (remaining <= 0) {
+      break;
+    }
+
+    const parsed = parseStockQuantity(batch.quantity || '');
+
+    if (!parsed) {
+      continue;
+    }
+
+    const batchUnit = parsed.unit.trim();
+
+    if (unit && batchUnit && unit !== batchUnit) {
+      return {
+        error: `批次「${batch.batch_no || batch.id}」的单位是「${batchUnit}」，当前扣减单位是「${unit}」。为了避免批次账不一致，暂时没有更新库存。`,
+      };
+    }
+
+    if (parsed.amount <= 0) {
+      continue;
+    }
+
+    const deductAmount = Math.min(parsed.amount, remaining);
+    const nextAmount = parsed.amount - deductAmount;
+    const resolvedUnit = batchUnit || unit;
+
+    deductions.push({
+      batch,
+      before: formatStockQuantity(parsed.amount, resolvedUnit),
+      after: formatStockQuantity(nextAmount, resolvedUnit),
+      amount: deductAmount,
+    });
+    remaining -= deductAmount;
+  }
+
+  if (remaining > 0) {
+    return {
+      error: `该产品已经建立批次，但可扣减批次数量不足，还差 ${formatStockQuantity(remaining, unit)}。暂时没有更新库存。`,
+    };
+  }
+
+  return { deductions };
 }
 
 function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
@@ -97,14 +178,42 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
 
   const nextQuantity = formatStockQuantity(nextAmount, unit);
   const db = getDb();
+  const batches = loadBatchesForDeduction(intent.medicine.id);
+  const batchPlan = buildBatchDeductions(batches, intent.amount, unit);
 
-  db.prepare('UPDATE medicines SET quantity = ? WHERE id = ?').run(nextQuantity, intent.medicine.id);
+  if ('error' in batchPlan) {
+    return {
+      answer: batchPlan.error,
+      medicines: [intent.medicine],
+      inventoryChanged: false,
+    };
+  }
+
+  const updateProductAndBatches = db.transaction(() => {
+    db.prepare('UPDATE medicines SET quantity = ? WHERE id = ?').run(nextQuantity, intent.medicine.id);
+
+    batchPlan.deductions.forEach((deduction) => {
+      db.prepare('UPDATE inventory_batches SET quantity = ? WHERE id = ?').run(
+        deduction.after,
+        deduction.batch.id,
+      );
+    });
+  });
+
+  updateProductAndBatches();
 
   const updatedRow = db
     .prepare('SELECT * FROM medicines WHERE id = ?')
     .get(intent.medicine.id) as MedicineRecord;
   const updatedMedicine = rowToMedicine(updatedRow);
   const spec = updatedMedicine.spec ? `（${updatedMedicine.spec}）` : '';
+  const batchNote = batchPlan.deductions.length
+    ? `批次扣减：${batchPlan.deductions
+        .map((deduction) =>
+          `${deduction.batch.batch_no || `#${deduction.batch.id}`} ${deduction.before}→${deduction.after}`,
+        )
+        .join('；')}`
+    : '';
 
   recordInventoryTransaction(db, {
     medicineId: updatedMedicine.id,
@@ -114,12 +223,12 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
     quantityAfter: nextQuantity,
     quantityDelta: formatStockQuantity(-intent.amount, unit),
     source: 'ai',
-    reason: 'AI 库存扣减',
-    note: question,
+    reason: batchPlan.deductions.length ? 'AI 库存扣减（近效期批次优先）' : 'AI 库存扣减',
+    note: [question, batchNote].filter(Boolean).join('\n'),
   });
 
   return {
-    answer: `好的，已更新库存。\n\n**${formatMedicineName(updatedMedicine)}**${spec}：原来 ${formatStockQuantity(current.amount, unit)}，现在 ${nextQuantity}。`,
+    answer: `好的，已更新库存。\n\n**${formatMedicineName(updatedMedicine)}**${spec}：原来 ${formatStockQuantity(current.amount, unit)}，现在 ${nextQuantity}。${batchNote ? `\n\n${batchNote}` : ''}`,
     medicines: [updatedMedicine],
     inventoryChanged: true,
   };
