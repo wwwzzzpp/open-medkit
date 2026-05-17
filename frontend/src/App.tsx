@@ -132,8 +132,8 @@ export default function App() {
   const handleCreateSuccess = ({ count, names }: AddSuccessPayload) => {
     const message =
       count <= 1
-        ? `${names[0] || '药品'} 已加入药箱`
-        : `${count} 条药品已加入药箱`;
+        ? `${names[0] || '产品'} 已加入库存`
+        : `${count} 条产品已加入库存`;
 
     setAddSuccessMessage(message);
 
@@ -219,6 +219,7 @@ export default function App() {
             medicines={allMedicines}
             medicinesLoading={loading}
             onAddMedicine={handleOpenAddModal}
+            onInventoryChange={refresh}
           />
         </section>
 
@@ -229,7 +230,7 @@ export default function App() {
           <div className="flex min-h-0 flex-1 flex-col gap-4 md:gap-5">
             <div className="px-1">
               <h2 className="text-[26px] font-semibold leading-none text-ink md:text-[30px]">
-                药品列表
+                库存列表
               </h2>
               <div className="mt-2.5">
                 <StatsRow stats={stats} expiringDays={settings.expiringDays} />

@@ -5,8 +5,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ImagePlus,
+  Package,
   Pencil,
-  Pill,
   RefreshCw,
   Sparkles,
   X,
@@ -77,10 +77,10 @@ const emptyDraft: MedicineDraft = {
 
 const CARD_FIELD_ORDER: Array<{ key: keyof MedicineDraft; label: string; wide?: boolean }> = [
   { key: 'spec', label: '规格' },
-  { key: 'quantity', label: '剩余数量' },
+  { key: 'quantity', label: '库存数量' },
   { key: 'category', label: '分类' },
   { key: 'location', label: '存放位置' },
-  { key: 'usage_desc', label: '用途 / 适应症', wide: true },
+  { key: 'usage_desc', label: '防治对象 / 用途', wide: true },
   { key: 'notes', label: '备注', wide: true },
 ];
 
@@ -327,7 +327,7 @@ function MedicinePreviewCard({
         <div className="theme-header-gradient flex items-center justify-between px-[18px] py-3.5">
           <div className="flex items-center gap-2.5">
             <div className="flex h-[34px] w-[34px] items-center justify-center rounded-lg bg-white/15 text-white">
-              <Pill className="h-[18px] w-[18px]" strokeWidth={2} />
+              <Package className="h-[18px] w-[18px]" strokeWidth={2} />
             </div>
             <div>
               <div className="min-w-[80px] font-body text-[17px] font-semibold text-white">
@@ -490,7 +490,7 @@ function InlineEditForm({
         <div className="flex flex-col gap-3 pb-0.5">
           <div className="grid grid-cols-2 gap-2.5">
             <div className="flex flex-col gap-1">
-              <label className={labelCls}>药品名称</label>
+              <label className={labelCls}>产品名称 / 有效成分</label>
               <input
                 className={inputCls}
                 value={draft.name}
@@ -498,16 +498,16 @@ function InlineEditForm({
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className={labelCls}>品牌名</label>
+              <label className={labelCls}>商品名 / 品牌</label>
               <input
                 className={inputCls}
                 value={draft.brand}
                 onChange={(e) => onChange('brand', e.target.value)}
-                placeholder="选填，如：开瑞坦"
+                placeholder="选填，如：厂家或商品名"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className={labelCls}>英文名</label>
+              <label className={labelCls}>英文名 / 登记名</label>
               <input
                 className={inputCls}
                 value={draft.name_en}
@@ -538,7 +538,7 @@ function InlineEditForm({
 
           <div className="grid grid-cols-2 gap-2.5">
             <div className="flex flex-col gap-1">
-              <label className={labelCls}>剩余数量</label>
+              <label className={labelCls}>库存数量</label>
               <input
                 className={inputCls}
                 value={draft.quantity}
@@ -551,7 +551,7 @@ function InlineEditForm({
                 className={inputCls}
                 value={draft.location}
                 onChange={(e) => onChange('location', e.target.value)}
-                placeholder="如：药箱第一层"
+                placeholder="如：农药库A架"
               />
             </div>
           </div>
@@ -577,7 +577,7 @@ function InlineEditForm({
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className={labelCls}>用途 / 适应症</label>
+            <label className={labelCls}>防治对象 / 用途</label>
             <textarea
               className={`${inputCls} min-h-[70px] resize-y`}
               value={draft.usage_desc}
@@ -659,7 +659,7 @@ function DraftFields({
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <Field label="药品名称">
+      <Field label="产品名称 / 有效成分">
         <input
           value={draft.name}
           onChange={(e) => onChange('name', e.target.value)}
@@ -667,16 +667,16 @@ function DraftFields({
         />
       </Field>
 
-      <Field label="品牌名">
+      <Field label="商品名 / 品牌">
         <input
           value={draft.brand}
           onChange={(e) => onChange('brand', e.target.value)}
-          placeholder="选填，如：开瑞坦"
+          placeholder="选填，如：厂家或商品名"
           className={baseInputClasses(Boolean(flashFields?.has('brand')))}
         />
       </Field>
 
-      <Field label="英文名">
+      <Field label="英文名 / 登记名">
         <input
           value={draft.name_en}
           onChange={(e) => onChange('name_en', e.target.value)}
@@ -701,7 +701,7 @@ function DraftFields({
         />
       </Field>
 
-      <Field label="剩余数量">
+      <Field label="库存数量">
         <input
           value={draft.quantity}
           onChange={(e) => onChange('quantity', e.target.value)}
@@ -728,7 +728,7 @@ function DraftFields({
         />
       </Field>
 
-      <Field label="用途/适应症" span="sm:col-span-2">
+      <Field label="防治对象 / 用途" span="sm:col-span-2">
         <textarea
           value={draft.usage_desc}
           onChange={(e) => onChange('usage_desc', e.target.value)}
@@ -776,20 +776,20 @@ function CompactEditForm({
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="药品名称" span="sm:col-span-2">
+          <Field label="产品名称 / 有效成分" span="sm:col-span-2">
             <input
               value={draft.name}
               onChange={(e) => onChange('name', e.target.value)}
-              placeholder="例如：布洛芬缓释胶囊"
+              placeholder="例如：噻呋酰胺·戊唑醇"
               className={baseInputClasses(Boolean(flashFields?.has('name')))}
             />
           </Field>
 
-          <Field label="品牌名">
+          <Field label="商品名 / 品牌">
             <input
               value={draft.brand}
               onChange={(e) => onChange('brand', e.target.value)}
-              placeholder="选填，如：开瑞坦"
+              placeholder="选填，如：厂家或商品名"
               className={baseInputClasses(Boolean(flashFields?.has('brand')))}
             />
           </Field>
@@ -798,7 +798,7 @@ function CompactEditForm({
             <input
               value={draft.spec}
               onChange={(e) => onChange('spec', e.target.value)}
-              placeholder="例如：300mg/粒"
+              placeholder="例如：32%悬浮剂，100g/瓶"
               className={baseInputClasses(Boolean(flashFields?.has('spec')))}
             />
           </Field>
@@ -812,11 +812,11 @@ function CompactEditForm({
             />
           </Field>
 
-          <Field label="剩余数量">
+          <Field label="库存数量">
             <input
               value={draft.quantity}
               onChange={(e) => onChange('quantity', e.target.value)}
-              placeholder="例如：20粒"
+              placeholder="例如：20瓶"
               className={baseInputClasses(Boolean(flashFields?.has('quantity')))}
             />
           </Field>
@@ -836,7 +836,7 @@ function CompactEditForm({
             <input
               value={draft.location}
               onChange={(e) => onChange('location', e.target.value)}
-              placeholder="例如：药箱第一层"
+              placeholder="例如：农药库A架"
               className={baseInputClasses(Boolean(flashFields?.has('location')))}
             />
           </Field>
@@ -868,7 +868,7 @@ function CompactEditForm({
         >
           <div className="overflow-hidden">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="英文名">
+              <Field label="英文名 / 登记名">
                 <input
                   value={draft.name_en}
                   onChange={(e) => onChange('name_en', e.target.value)}
@@ -879,7 +879,7 @@ function CompactEditForm({
 
               <div className="hidden sm:block" />
 
-              <Field label="用途 / 适应症" span="sm:col-span-2">
+              <Field label="防治对象 / 用途" span="sm:col-span-2">
                 <textarea
                   value={draft.usage_desc}
                   onChange={(e) => onChange('usage_desc', e.target.value)}
@@ -1394,7 +1394,7 @@ export function AddModal({
 
   const handleSaveSingle = async () => {
     if (!draft.name.trim()) {
-      setError('药品名称不能为空');
+      setError('产品名称不能为空');
       return;
     }
 
@@ -1422,7 +1422,7 @@ export function AddModal({
   const handleSaveBatch = async () => {
     const valid = batchItems.filter((item) => item.success && item.form.name.trim());
     if (valid.length === 0) {
-      setError('请至少保留一条带药品名称的记录');
+      setError('请至少保留一条带产品名称的记录');
       return;
     }
 
@@ -1480,12 +1480,12 @@ export function AddModal({
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border/40 px-5 pb-4 pt-5 sm:px-6">
           <div>
             <h2 className="font-body text-xl font-semibold text-ink">
-              {isEditMode ? '编辑药品' : '添加药品'}
+              {isEditMode ? '编辑产品' : '添加农药'}
             </h2>
             <p className="mt-1 text-[12px] leading-5 text-ink3">
               {isEditMode
-                ? '直接修改关键信息，保存后会立即更新药品列表。'
-                : '按两步完成：先描述药品，再确认 AI 整理的结构化信息'}
+                ? '直接修改关键信息，保存后会立即更新库存列表。'
+                : '按两步完成：先描述农药或农资产品，再确认 AI 整理的结构化信息'}
             </p>
           </div>
           <button
@@ -1539,7 +1539,7 @@ export function AddModal({
                   <div className="relative overflow-hidden rounded-[10px] border-[1.5px] border-border bg-surface">
                     <img
                       src={imageDataUrl}
-                      alt="药品照片"
+                      alt="农药包装照片"
                       className="max-h-[240px] w-full object-contain bg-surface2"
                     />
                     <button
@@ -1567,7 +1567,7 @@ export function AddModal({
                         value={photoLocation}
                         onChange={(e) => setPhotoLocation(e.target.value)}
                         className="theme-input w-full rounded-[7px] border-[1.5px] px-[11px] py-2 text-[13.5px] outline-none transition-colors"
-                        placeholder="如：药箱第一层"
+                        placeholder="如：农药库A架"
                       />
                     </label>
                   </div>
@@ -1576,7 +1576,7 @@ export function AddModal({
                 <>
                   <div className="flex items-center gap-1.5 text-[13px] font-medium text-ink">
                     <span className="inline-block h-[13px] w-[3px] rounded-sm bg-accent" />
-                    输入药品描述
+                    输入产品描述
                   </div>
                   <textarea
                     value={aiText}
@@ -1585,7 +1585,7 @@ export function AddModal({
                       setError('');
                     }}
                     placeholder={
-                      '例如：布洛芬缓释胶囊，2027年9月29日，20粒，客厅抽屉\n\n多个药品可换行分隔，会在下一步批量确认。'
+                      '例如：32%噻呋酰胺·戊唑醇，100g/瓶，2027年9月29日，41瓶，农药库A架，小麦纹枯病\n\n多个产品可换行分隔，会在下一步批量确认。'
                     }
                     className="theme-input min-h-[110px] w-full resize-y rounded-[10px] border-[1.5px] px-3.5 py-3 text-[14px] leading-[1.6] outline-none transition-colors focus:border-accent"
                   />
@@ -1632,7 +1632,7 @@ export function AddModal({
                   localStorage 中。
                 </p>
                 <p>
-                  AI 结果可能不完整或出错，请在提交入库前逐项核对药名、剂量、有效期和用途。
+                  AI 结果可能不完整或出错，请在提交入库前逐项核对产品名、含量/剂型、有效期、分类和用途。
                 </p>
               </DismissibleNotice>
             </>
@@ -1753,7 +1753,7 @@ export function AddModal({
                         <div className="theme-header-gradient px-[18px] py-3.5">
                           <div className="flex items-center gap-2.5">
                             <div className="flex h-[34px] w-[34px] items-center justify-center rounded-lg bg-white/15 text-white">
-                              <Pill className="h-[18px] w-[18px]" strokeWidth={2} />
+                              <Package className="h-[18px] w-[18px]" strokeWidth={2} />
                             </div>
                             <div className="font-body text-[15px] font-medium text-white/70">
                               条目 {batchActiveIndex + 1}

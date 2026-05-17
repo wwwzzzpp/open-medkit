@@ -103,7 +103,7 @@ export function MedGrid({
                 <input
                   value={searchQuery}
                   onChange={(event) => onSearchQueryChange(event.target.value)}
-                  placeholder="搜索名称、品牌、用途、位置..."
+                  placeholder="搜索名称、成分、分类、用途、位置..."
                   className="w-full bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3"
                 />
               </label>
@@ -274,8 +274,8 @@ export function MedGrid({
           <div className="w-full rounded-[18px] border border-dashed border-border/60 bg-surface3 px-6 py-16 text-center">
             <div className="text-sm text-ink2">
               {hasActiveFilters
-                ? '没有符合当前筛选条件的药品'
-                : '药箱是空的，点击添加第一个药品'}
+                ? '没有符合当前筛选条件的产品'
+                : '库存是空的，点击添加第一个产品'}
             </div>
 
             {hasActiveFilters && (
@@ -285,7 +285,7 @@ export function MedGrid({
                 className="theme-button-neutral mt-4 inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12px] transition-all duration-200 active:scale-95"
               >
                 <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} />
-                <span>返回全部药品</span>
+                <span>返回全部库存</span>
               </button>
             )}
           </div>

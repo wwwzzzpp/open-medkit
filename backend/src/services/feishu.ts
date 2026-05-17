@@ -73,7 +73,7 @@ export async function sendWebhook(
   }
 
   const lines = message.split('\n');
-  const title = (lines[0] || '药品过期提醒').replace(/[*_~]/g, '');
+  const title = (lines[0] || '库存到期提醒').replace(/[*_~]/g, '');
   const body = lines.slice(1).join('\n').trim();
 
   const card = {

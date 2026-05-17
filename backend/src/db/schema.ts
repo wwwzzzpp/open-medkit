@@ -1,3 +1,5 @@
+import { AGROCHEMICAL_CATEGORIES } from '../agrochemical';
+
 export const schema = `
 CREATE TABLE IF NOT EXISTS medicines (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,12 +45,4 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 `;
 
-export const DEFAULT_CATEGORIES = [
-  '感冒发烧',
-  '外伤处理',
-  '慢性病用药',
-  '维生素补剂',
-  '皮肤外用',
-  '消化系统',
-  '其他',
-];
+export const DEFAULT_CATEGORIES = [...AGROCHEMICAL_CATEGORIES];

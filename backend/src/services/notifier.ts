@@ -66,7 +66,7 @@ const senders: Record<string, NotificationSender> = {
         throw new Error('Email channel not fully configured');
       }
       const html = wrapEmailHtml(message);
-      await email.sendEmail(emailConfig, '药品过期提醒 — OpenMedKit', html);
+      await email.sendEmail(emailConfig, '库存到期提醒 — OpenMedKit', html);
     },
   },
 };
@@ -108,7 +108,7 @@ export function buildNotificationMessage(
   todayStr: string,
   format: MessageFormat = 'html',
 ): string {
-  const lines: string[] = [`⚠️ ${bold('药品过期提醒', format)}`, ''];
+  const lines: string[] = [`⚠️ ${bold('农药/农资库存到期提醒', format)}`, ''];
 
   if (expired.length > 0) {
     lines.push(bold(`已过期（${expired.length} 件）：`, format));
@@ -128,7 +128,7 @@ export function buildNotificationMessage(
     lines.push('');
   }
 
-  lines.push('请及时处理。');
+  lines.push('请及时隔离、核对标签并处理。');
   return lines.join('\n');
 }
 
@@ -183,7 +183,7 @@ export async function sendNotificationNow(channelType: string): Promise<string> 
   const { expired, expiring, todayStr } = queryExpiringMedicines(db, timezone);
 
   if (expired.length === 0 && expiring.length === 0) {
-    return '当前没有过期或即将过期的药品，无需发送提醒。';
+    return '当前没有过期或即将过期的库存产品，无需发送提醒。';
   }
 
   const message = buildNotificationMessage(expired, expiring, todayStr, sender.format);

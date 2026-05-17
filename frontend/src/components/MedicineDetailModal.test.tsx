@@ -11,14 +11,14 @@ vi.mock('../hooks/useTimezone', () => ({
 
 const medicine = {
   id: 1,
-  name: '布洛芬缓释胶囊',
-  name_en: 'Ibuprofen SR Capsules',
-  spec: '300mg/粒',
-  quantity: '20粒',
+  name: '噻呋酰胺·戊唑醇',
+  name_en: '',
+  spec: '32%悬浮剂，100g/瓶',
+  quantity: '20瓶',
   expires_at: '2026-07-01',
-  category: '感冒发烧',
-  usage_desc: '退烧止痛',
-  location: '药箱 A 层',
+  category: '杀菌剂',
+  usage_desc: '小麦纹枯病',
+  location: '农药库 A 架',
   notes: '',
   created_at: '2026-04-01T00:00:00Z',
   updated_at: '2026-04-01T00:00:00Z',
@@ -43,16 +43,16 @@ describe('MedicineDetailModal', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '删除药品' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除产品' }));
 
     expect(
-      screen.getByRole('alertdialog', { name: '确认删除「布洛芬缓释胶囊」吗？' }),
+      screen.getByRole('alertdialog', { name: '确认删除「噻呋酰胺·戊唑醇」吗？' }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '先保留' }));
     expect(onDelete).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: '删除药品' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除产品' }));
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith(medicine));
@@ -72,7 +72,7 @@ describe('MedicineDetailModal', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '删除药品' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除产品' }));
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith(medicine));

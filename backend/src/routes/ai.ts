@@ -6,14 +6,21 @@ import { buildChatCompletionsUrl, callAiJson, callAiText } from '../ai/client';
 import { isRecord, parseAiJsonResponse } from '../ai/json-utils';
 import {
   type Medicine,
+  type MedicineRecord,
   getAllMedicines,
   getDateBoundaries,
   getDynamicCategories,
   normalizeExpiringDays,
   normalizeMedicineDraftPayload,
   normalizeQueryResponseStyle,
+  rowToMedicine,
   validateImageDataUrl,
 } from '../ai/medicine';
+import {
+  formatStockQuantity,
+  parseInventoryAdjustmentIntent,
+  parseStockQuantity,
+} from '../ai/inventory-actions';
 import { completeMedicineDraft, parseMedicineImage, parseMedicineText } from '../ai/parse';
 import {
   buildBatchParsePrompt,
@@ -31,8 +38,79 @@ import {
 } from '../ai/query';
 import { createSseProxyResponse } from '../ai/stream';
 import type { ChatMessage } from '../ai/types';
+import { getDb } from '../db/client';
 
 export const aiRouter = new Hono<AiEnv>();
+
+function formatMedicineName(medicine: Medicine) {
+  return medicine.brand && medicine.brand !== medicine.name
+    ? `${medicine.brand} · ${medicine.name}`
+    : medicine.name;
+}
+
+function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
+  const intent = parseInventoryAdjustmentIntent(question, medicines);
+
+  if (!intent) {
+    return null;
+  }
+
+  if ('error' in intent) {
+    return {
+      answer: intent.error,
+      medicines: [],
+      inventoryChanged: false,
+    };
+  }
+
+  const current = parseStockQuantity(intent.medicine.quantity || '');
+
+  if (!current) {
+    return {
+      answer: `我找到了 **${formatMedicineName(intent.medicine)}**，但当前库存数量「${intent.medicine.quantity || '未填写'}」无法自动计算。请先把库存填成类似「15瓶」这样的格式。`,
+      medicines: [intent.medicine],
+      inventoryChanged: false,
+    };
+  }
+
+  const requestedUnit = intent.unit.trim();
+  const unit = current.unit || requestedUnit;
+
+  if (requestedUnit && current.unit && requestedUnit !== current.unit) {
+    return {
+      answer: `我找到了 **${formatMedicineName(intent.medicine)}**，但当前单位是「${current.unit}」，你这次写的是「${requestedUnit}」。为了避免扣错，暂时没有更新库存。`,
+      medicines: [intent.medicine],
+      inventoryChanged: false,
+    };
+  }
+
+  const nextAmount = current.amount - intent.amount;
+
+  if (nextAmount < 0) {
+    return {
+      answer: `库存不足，暂时没有更新。**${formatMedicineName(intent.medicine)}** 当前只有 ${formatStockQuantity(current.amount, unit)}，不能减掉 ${formatStockQuantity(intent.amount, unit)}。`,
+      medicines: [intent.medicine],
+      inventoryChanged: false,
+    };
+  }
+
+  const nextQuantity = formatStockQuantity(nextAmount, unit);
+  const db = getDb();
+
+  db.prepare('UPDATE medicines SET quantity = ? WHERE id = ?').run(nextQuantity, intent.medicine.id);
+
+  const updatedRow = db
+    .prepare('SELECT * FROM medicines WHERE id = ?')
+    .get(intent.medicine.id) as MedicineRecord;
+  const updatedMedicine = rowToMedicine(updatedRow);
+  const spec = updatedMedicine.spec ? `（${updatedMedicine.spec}）` : '';
+
+  return {
+    answer: `好的，已更新库存。\n\n**${formatMedicineName(updatedMedicine)}**${spec}：原来 ${formatStockQuantity(current.amount, unit)}，现在 ${nextQuantity}。`,
+    medicines: [updatedMedicine],
+    inventoryChanged: true,
+  };
+}
 
 aiRouter.get('/config-status', (c) => {
   const hasServerAiConfig =
@@ -406,7 +484,11 @@ aiRouter.post('/query-stream', async (c) => {
     const { todayStr, in30daysStr } = getDateBoundaries(expiringDays);
     const encoder = new TextEncoder();
 
-    const immediateResponse = (answer: string, matchedMedicines: Medicine[]) => {
+    const immediateResponse = (
+      answer: string,
+      matchedMedicines: Medicine[],
+      inventoryChanged = false,
+    ) => {
       const sseStream = new ReadableStream({
         start(controller) {
           controller.enqueue(
@@ -414,7 +496,7 @@ aiRouter.post('/query-stream', async (c) => {
           );
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ type: 'done', answer, medicines: matchedMedicines })}\n\n`,
+              `data: ${JSON.stringify({ type: 'done', answer, medicines: matchedMedicines, inventoryChanged })}\n\n`,
             ),
           );
           controller.close();
@@ -432,6 +514,16 @@ aiRouter.post('/query-stream', async (c) => {
 
     if (medicines.length === 0) {
       return immediateResponse(buildEmptyBoxAnswer(responseStyle), []);
+    }
+
+    const inventoryAdjustment = applyInventoryAdjustment(question, medicines);
+
+    if (inventoryAdjustment) {
+      return immediateResponse(
+        inventoryAdjustment.answer,
+        inventoryAdjustment.medicines,
+        inventoryAdjustment.inventoryChanged,
+      );
     }
 
     if (isInventoryQuestion(question)) {
@@ -561,6 +653,7 @@ aiRouter.post('/query-stream', async (c) => {
             type: 'done',
             answer: result.data.answer,
             medicines: result.data.medicines,
+            inventoryChanged: false,
           });
         } catch (err) {
           sendEvent({
@@ -614,7 +707,16 @@ aiRouter.post('/query', async (c) => {
         data: {
           answer: buildEmptyBoxAnswer(responseStyle),
           medicines: [],
+          inventoryChanged: false,
         },
+      });
+    }
+
+    const inventoryAdjustment = applyInventoryAdjustment(question, medicines);
+
+    if (inventoryAdjustment) {
+      return c.json({
+        data: inventoryAdjustment,
       });
     }
 
@@ -623,6 +725,7 @@ aiRouter.post('/query', async (c) => {
         data: {
           answer: buildInventoryAnswer(medicines, todayStr, in30daysStr, expiringDays, responseStyle),
           medicines,
+          inventoryChanged: false,
         },
       });
     }
@@ -644,7 +747,12 @@ aiRouter.post('/query', async (c) => {
       return c.json({ error: result.error, raw: result.raw }, 422);
     }
 
-    return c.json(result);
+    return c.json({
+      data: {
+        ...result.data,
+        inventoryChanged: false,
+      },
+    });
   } catch (error) {
     return c.json(
       {

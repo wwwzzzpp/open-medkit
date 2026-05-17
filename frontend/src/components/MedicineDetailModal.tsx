@@ -201,23 +201,23 @@ export function MedicineDetailModal({
         <div className="flex-1 space-y-3.5 overflow-y-auto px-5 py-4">
           <div className={`rounded-[16px] border px-3.5 py-2.5 text-[13px] ${styles.banner}`}>
             {status === 'expired'
-              ? '这款药品已经过期，使用前请谨慎确认并优先清理。'
+              ? '这款产品已经过期，建议优先隔离、核对标签并处理。'
               : status === 'expiring'
-                ? `这款药品将在 ${typeof days === 'number' ? `${days} 天内` : '近期'} 到期，建议尽快留意。`
+                ? `这款产品将在 ${typeof days === 'number' ? `${days} 天内` : '近期'} 到期，建议尽快留意。`
                 : status === 'ok'
                   ? '当前状态良好，详细信息都整理在这里了。'
                   : '还没有填写有效期，建议补充完整信息。'}
           </div>
 
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            <MetaCard label="品牌" value={medicine.brand || '未填写'} />
+            <MetaCard label="商品名 / 品牌" value={medicine.brand || '未填写'} />
             <MetaCard label="规格" value={medicine.spec || '未填写'} />
             <MetaCard label="有效期" value={formatDate(medicine.expires_at)} />
-            <MetaCard label="剩余数量" value={medicine.quantity || '未填写'} />
+            <MetaCard label="库存数量" value={medicine.quantity || '未填写'} />
             <MetaCard label="存放位置" value={medicine.location || '未填写'} />
           </div>
 
-          <Section title="用途 / 适应症" value={medicine.usage_desc} />
+          <Section title="防治对象 / 用途" value={medicine.usage_desc} />
           <Section title="备注" value={medicine.notes} />
         </div>
 
@@ -230,7 +230,7 @@ export function MedicineDetailModal({
               onClick={() => onEdit(medicine)}
               className="theme-button-secondary rounded-lg border px-4 py-2 text-[13px] font-medium transition-all"
             >
-              编辑药品
+              编辑产品
             </button>
 
             <button
@@ -239,7 +239,7 @@ export function MedicineDetailModal({
               disabled={deleting}
               className="rounded-lg border border-status-danger/25 bg-status-danger-bg/55 px-4 py-2 text-[13px] font-medium text-status-danger transition-all hover:bg-status-danger-bg/75 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {deleting ? '删除中...' : '删除药品'}
+              {deleting ? '删除中...' : '删除产品'}
             </button>
           </div>
         </div>
@@ -248,7 +248,7 @@ export function MedicineDetailModal({
       <ConfirmDialog
         open={confirmOpen}
         title={`确认删除「${displayName}」吗？`}
-        description="删除后这条药品记录会从当前药箱中移除，相关到期提醒和查询结果也不会再显示。"
+        description="删除后这条库存记录会从当前库存中移除，相关到期提醒和查询结果也不会再显示。"
         confirmLabel="确认删除"
         cancelLabel="先保留"
         tone="danger"

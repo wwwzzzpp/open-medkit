@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 
+import { normalizeAgrochemicalCategory } from '../agrochemical';
 import { getDb } from '../db/client';
 import { DEFAULT_CATEGORIES } from '../db/schema';
 import {
@@ -47,7 +48,7 @@ function normalizeExpiringDays(value?: string) {
 }
 
 function normalizeMedicineInput(input: Partial<MedicineInput>) {
-  return {
+  const normalized = {
     name: input.name?.trim() || '',
     brand: input.brand?.trim() || '',
     name_en: input.name_en?.trim() || '',
@@ -58,6 +59,19 @@ function normalizeMedicineInput(input: Partial<MedicineInput>) {
     usage_desc: input.usage_desc?.trim() || '',
     location: input.location?.trim() || '',
     notes: input.notes?.trim() || '',
+  };
+
+  return {
+    ...normalized,
+    category: normalizeAgrochemicalCategory(
+      normalized.category,
+      normalized.name,
+      normalized.brand,
+      normalized.name_en,
+      normalized.spec,
+      normalized.usage_desc,
+      normalized.notes,
+    ),
   };
 }
 

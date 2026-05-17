@@ -80,11 +80,11 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
             />
           </div>
           <h1 className="font-display text-[34px] font-light tracking-tight text-ink">
-            OpenMedKit
+            农药库存
           </h1>
           {/* <div className="mx-auto mt-4 h-px w-12 bg-gradient-to-r from-transparent via-accent/40 to-transparent" /> */}
           <p className="mt-4 font-mono text-[12px] tracking-[0.2em] text-ink3">
-            AI-POWERED MEDICINE MANAGER
+            AI-POWERED AGROCHEMICAL INVENTORY
           </p>
         </div>
 
@@ -127,7 +127,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
               !loading && password.trim() ? 'animate-softGlow' : ''
             }`}
           >
-            {loading ? '验证中…' : '进入药箱'}
+            {loading ? '验证中…' : '进入库存'}
             {!loading && (
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             )}

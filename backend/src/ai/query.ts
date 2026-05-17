@@ -136,6 +136,16 @@ export function collectMatchedMedicines(payload: unknown, medicines: Medicine[])
 export function isInventoryQuestion(question: string) {
   const normalized = question.replace(/\s+/g, '');
   const patterns = [
+    '库存里都有什么',
+    '库存里有什么',
+    '农药库存',
+    '农资库存',
+    '都有什么农药',
+    '有什么农药',
+    '所有农药',
+    '全部农药',
+    '农药清单',
+    '农资清单',
     '家里都有什么药',
     '家里有什么药',
     '药箱里都有什么药',
@@ -263,7 +273,7 @@ function buildQueryNotes(
   }
 
   if (expired.length > 0) {
-    lines.push(`- **已过期**：${expired.map(formatMedicineDisplayName).join('、')}，请勿继续使用`);
+    lines.push(`- **已过期**：${expired.map(formatMedicineDisplayName).join('、')}，请优先隔离并核对标签处理`);
   }
 
   if (expiring.length > 0) {
@@ -291,10 +301,10 @@ export function buildInventoryAnswer(
     .map((medicine) => `**${formatMedicineDisplayName(medicine)}**`)
     .join('、');
   const lines = [
-    '### 药箱概况',
-    `- 共 **${medicines.length}** 种药；已过期 **${expired.length}** 种；${expiringDays} 天内到期 **${expiring.length}** 种`,
+    '### 库存概况',
+    `- 共 **${medicines.length}** 种产品；已过期 **${expired.length}** 种；${expiringDays} 天内到期 **${expiring.length}** 种`,
     previewNames
-      ? `- 常见药品：${previewNames}${medicines.length > 5 ? ` 等 ${medicines.length} 种` : ''}`
+      ? `- 库存产品：${previewNames}${medicines.length > 5 ? ` 等 ${medicines.length} 种` : ''}`
       : '- 下方卡片可查看完整清单',
   ];
 
@@ -333,14 +343,14 @@ export function buildMatchedAnswer(
   responseStyle: QueryResponseStyle,
 ) {
   if (medicines.length === 0) {
-    return '### 查询结果\n药箱中没有相关药品。';
+    return '### 查询结果\n库存中没有相关产品。';
   }
 
   const preview = medicines.slice(0, 3);
   let displayedCount = preview.length;
   const lines = [
     '### 查询结果',
-    `- 找到 **${medicines.length}** 个相关药品`,
+    `- 找到 **${medicines.length}** 个相关产品`,
     ...preview.map((medicine) => formatMedicineBullet(medicine, todayStr, in30daysStr)),
   ];
 
@@ -354,7 +364,7 @@ export function buildMatchedAnswer(
   }
 
   if (medicines.length > displayedCount) {
-    lines.push(`- 其余结果请看下方药品卡片`);
+    lines.push(`- 其余结果请看下方库存卡片`);
   }
 
   const notes = buildQueryNotes(medicines, todayStr, in30daysStr, expiringDays);
@@ -368,10 +378,10 @@ export function buildMatchedAnswer(
 
 export function buildEmptyBoxAnswer(responseStyle: QueryResponseStyle) {
   if (responseStyle === 'detailed') {
-    return '### 药箱状态\n药箱目前是空的，请先添加药品。\n- 可以先用 AI 解析录入常备药\n- 录入后我就能帮你按症状和有效期检索';
+    return '### 库存状态\n库存目前是空的，请先添加农药或农资产品。\n- 可以先用 AI 解析录入包装信息\n- 录入后我就能帮你按类别、防治对象和有效期检索';
   }
 
-  return '### 药箱状态\n药箱是空的，请先添加药品。';
+  return '### 库存状态\n库存是空的，请先添加农药或农资产品。';
 }
 
 /**

@@ -69,22 +69,11 @@ describe('getDateBoundaries', () => {
 });
 
 describe('getMedicineExpiryState', () => {
-  const today = new Date('2026-04-02T16:30:00Z');
-  const todayStr = today.toISOString().slice(0, 10);
-
-  const pastDate = new Date(today);
-  pastDate.setDate(pastDate.getDate() - 10);
-  const pastStr = pastDate.toISOString().slice(0, 10);
-
-  const soonDate = new Date(today);
-  soonDate.setDate(soonDate.getDate() + 15);
-  const soonStr = soonDate.toISOString().slice(0, 10);
-
-  const futureDate = new Date(today);
-  futureDate.setDate(futureDate.getDate() + 60);
-  const futureStr = futureDate.toISOString().slice(0, 10);
-
-  const { in30daysStr } = getDateBoundaries(30, 'UTC');
+  const todayStr = '2026-04-02';
+  const in30daysStr = '2026-05-02';
+  const pastStr = '2026-03-23';
+  const soonStr = '2026-04-17';
+  const futureStr = '2026-06-01';
 
   it('returns "expired" when expires_at is in the past', () => {
     const med = { expires_at: pastStr } as any;

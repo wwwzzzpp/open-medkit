@@ -60,6 +60,8 @@ describe('isInventoryQuestion', () => {
     expect(isInventoryQuestion('所有药')).toBe(true);
     expect(isInventoryQuestion('药品清单')).toBe(true);
     expect(isInventoryQuestion('全部药')).toBe(true);
+    expect(isInventoryQuestion('农药库存里有什么')).toBe(true);
+    expect(isInventoryQuestion('农资清单')).toBe(true);
   });
 
   it('ignores whitespace', () => {
@@ -67,8 +69,8 @@ describe('isInventoryQuestion', () => {
   });
 
   it('returns false for non-inventory questions', () => {
-    expect(isInventoryQuestion('有没有退烧药')).toBe(false);
-    expect(isInventoryQuestion('头疼吃什么')).toBe(false);
+    expect(isInventoryQuestion('有没有杀菌剂')).toBe(false);
+    expect(isInventoryQuestion('纹枯病用什么')).toBe(false);
   });
 });
 
@@ -229,12 +231,12 @@ describe('sanitizeQueryAnswer', () => {
 describe('buildEmptyBoxAnswer', () => {
   it('returns concise answer by default', () => {
     const result = buildEmptyBoxAnswer('concise');
-    expect(result).toContain('药箱是空的');
+    expect(result).toContain('库存是空的');
   });
 
   it('returns detailed answer with tips', () => {
     const result = buildEmptyBoxAnswer('detailed');
-    expect(result).toContain('药箱目前是空的');
+    expect(result).toContain('库存目前是空的');
     expect(result).toContain('AI 解析');
   });
 });
@@ -246,7 +248,7 @@ describe('buildMatchedAnswer', () => {
 
   it('returns "no match" message for empty list', () => {
     const result = buildMatchedAnswer([], '2026-03-29', '2026-04-28', 30, 'concise');
-    expect(result).toContain('没有相关药品');
+    expect(result).toContain('没有相关产品');
   });
 
   it('lists matched medicines', () => {

@@ -23,7 +23,7 @@ interface LayoutProps {
 
 const tabs = [
   { id: 'ai', label: 'AI 检索', icon: BotIcon },
-  { id: 'manual', label: '药品列表', icon: LayoutGrid },
+  { id: 'manual', label: '库存列表', icon: LayoutGrid },
 ] as const satisfies ReadonlyArray<{
   id: 'ai' | 'manual';
   label: string;
@@ -58,7 +58,7 @@ export function Layout({
                     className="h-full w-full object-cover"
                   />
                 </div>
-                <h1 className="truncate text-xl font-bold tracking-tight text-white">OpenMedKit</h1>
+                <h1 className="truncate text-xl font-bold tracking-tight text-white">农药库存</h1>
               </div>
             </div>
 
@@ -81,7 +81,7 @@ export function Layout({
                 className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg bg-accent px-3.5 text-[13px] font-medium text-white shadow-sm transition-all duration-200 hover:bg-accent-hover hover:shadow active:scale-95"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                <span className="leading-none mb-[1px]">添加药品</span>
+                <span className="leading-none mb-[1px]">添加农药</span>
               </button>
 
               <button

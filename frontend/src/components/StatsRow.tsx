@@ -10,7 +10,7 @@ export function StatsRow({ stats, expiringDays }: StatsRowProps) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-[12px] tracking-wide text-ink3">
       <span>
-        药品总数{' '}
+        库存总数{' '}
         <span className="text-[13px] font-semibold text-ink">{stats.total}</span>
       </span>
       {stats.expiring > 0 && (

@@ -146,8 +146,8 @@ describe('GET /api/medicines/categories', () => {
     const app = createApp();
     const res = await app.request('/api/medicines/categories');
     const body = await res.json();
-    expect(body.data).toContain('感冒发烧');
-    expect(body.data).toContain('外伤处理');
+    expect(body.data).toContain('杀虫剂');
+    expect(body.data).toContain('杀菌剂');
   });
 
   it('merges DB categories with defaults', async () => {
@@ -156,7 +156,7 @@ describe('GET /api/medicines/categories', () => {
     const res = await app.request('/api/medicines/categories');
     const body = await res.json();
     expect(body.data).toContain('自定义分类');
-    expect(body.data).toContain('感冒发烧');
+    expect(body.data).toContain('杀菌剂');
   });
 });
 

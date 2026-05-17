@@ -29,8 +29,8 @@ afterEach(() => {
 });
 
 describe('AddModal', () => {
-  it('enables manual submit once a medicine name is entered', async () => {
-    vi.mocked(api.getCategories).mockResolvedValue(['感冒发烧']);
+  it('enables manual submit once a product name is entered', async () => {
+    vi.mocked(api.getCategories).mockResolvedValue(['杀菌剂']);
 
     const onCreate = vi.fn().mockResolvedValue(undefined);
     const onUpdate = vi.fn().mockResolvedValue(undefined);
@@ -53,8 +53,8 @@ describe('AddModal', () => {
     const submitButton = screen.getByRole('button', { name: '确认添加' });
     expect(submitButton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('药品名称'), {
-      target: { value: '布洛芬缓释胶囊' },
+    fireEvent.change(screen.getByLabelText('产品名称 / 有效成分'), {
+      target: { value: '噻呋酰胺·戊唑醇' },
     });
 
     expect(submitButton).toBeEnabled();
@@ -64,14 +64,14 @@ describe('AddModal', () => {
     await waitFor(() =>
       expect(onCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: '布洛芬缓释胶囊',
+          name: '噻呋酰胺·戊唑醇',
         }),
       ),
     );
   });
 
   it('submits the selected category from the custom select', async () => {
-    vi.mocked(api.getCategories).mockResolvedValue(['感冒发烧', '外伤处理']);
+    vi.mocked(api.getCategories).mockResolvedValue(['杀菌剂', '杀虫剂']);
 
     const onCreate = vi.fn().mockResolvedValue(undefined);
     const onUpdate = vi.fn().mockResolvedValue(undefined);
@@ -91,10 +91,10 @@ describe('AddModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '直接手动填写' }));
 
     fireEvent.click(screen.getByRole('button', { name: '分类' }));
-    fireEvent.click(screen.getByRole('option', { name: '外伤处理' }));
+    fireEvent.click(screen.getByRole('option', { name: '杀虫剂' }));
 
-    fireEvent.change(screen.getByLabelText('药品名称'), {
-      target: { value: '创可贴' },
+    fireEvent.change(screen.getByLabelText('产品名称 / 有效成分'), {
+      target: { value: '噻虫胺' },
     });
 
     fireEvent.click(screen.getByRole('button', { name: '确认添加' }));
@@ -102,8 +102,8 @@ describe('AddModal', () => {
     await waitFor(() =>
       expect(onCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: '创可贴',
-          category: '外伤处理',
+          name: '噻虫胺',
+          category: '杀虫剂',
         }),
       ),
     );

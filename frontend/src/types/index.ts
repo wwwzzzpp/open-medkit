@@ -57,7 +57,7 @@ export interface BatchParseResult {
 
 export type AiQueryStreamEvent =
   | { type: 'text'; content: string }
-  | { type: 'done'; answer: string; medicines: Medicine[] }
+  | { type: 'done'; answer: string; medicines: Medicine[]; inventoryChanged?: boolean }
   | { type: 'error'; message: string };
 
 // -- Notification channels --

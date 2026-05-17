@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 
+import { normalizeAgrochemicalCategory } from '../agrochemical';
 import type { AiEnv } from '../middleware/apiKey';
 import { callAiJson } from './client';
 import { isRecord } from './json-utils';
@@ -47,7 +48,7 @@ export async function completeMedicineDraft(
     { role: 'system', content: buildDraftCompletionPrompt(categories) },
     {
       role: 'user',
-      content: `原始描述：${sourceText || '（无）'}\n\n当前药品草稿：${JSON.stringify(draft, null, 2)}`,
+      content: `原始描述：${sourceText || '（无）'}\n\n当前库存草稿：${JSON.stringify(draft, null, 2)}`,
     },
   ]);
 
@@ -61,7 +62,14 @@ export async function completeMedicineDraft(
       brand: typeof parsed.brand === 'string' ? parsed.brand : '',
       name_en: typeof parsed.name_en === 'string' ? parsed.name_en : '',
       spec: typeof parsed.spec === 'string' ? parsed.spec : '',
-      category: typeof parsed.category === 'string' ? parsed.category : '',
+      category: normalizeAgrochemicalCategory(
+        typeof parsed.category === 'string' ? parsed.category : '',
+        typeof parsed.name === 'string' ? parsed.name : '',
+        typeof parsed.brand === 'string' ? parsed.brand : '',
+        typeof parsed.name_en === 'string' ? parsed.name_en : '',
+        typeof parsed.spec === 'string' ? parsed.spec : '',
+        typeof parsed.usage_desc === 'string' ? parsed.usage_desc : '',
+      ),
       usage_desc: typeof parsed.usage_desc === 'string' ? parsed.usage_desc : '',
     },
   };

@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, ArrowUp, Pill, Plus, Search } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  MessageSquare,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 
@@ -21,6 +29,7 @@ interface AiPanelProps {
   medicines?: Medicine[];
   medicinesLoading?: boolean;
   onAddMedicine?: () => void;
+  onInventoryChange?: () => void | Promise<void>;
 }
 
 type AssistantState = 'thinking' | 'streaming' | 'done' | 'error';
@@ -32,6 +41,19 @@ interface ChatMessage {
   text: string;
   medicines?: Medicine[];
   state?: AssistantState;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+
+interface ChatState {
+  activeSessionId: string;
+  sessions: ChatSession[];
 }
 
 interface QuestionComposerProps {
@@ -54,6 +76,108 @@ interface SuggestionChipRowProps {
 }
 
 const MEDICINES_PER_PAGE = 3;
+const CHAT_STORAGE_KEY = 'agro_inventory_chat_sessions_v1';
+const MAX_CHAT_SESSIONS = 24;
+const MAX_MESSAGES_PER_SESSION = 80;
+
+function createChatSession(title = '新对话'): ChatSession {
+  const now = new Date().toISOString();
+
+  return {
+    id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+  };
+}
+
+function buildChatTitle(question: string) {
+  const normalized = question.replace(/\s+/g, ' ').trim();
+
+  if (!normalized) {
+    return '新对话';
+  }
+
+  return normalized.length > 22 ? `${normalized.slice(0, 22)}...` : normalized;
+}
+
+function normalizeStoredMessages(value: unknown): ChatMessage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((message): message is ChatMessage => {
+      if (!message || typeof message !== 'object') return false;
+      const candidate = message as Partial<ChatMessage>;
+      return (
+        typeof candidate.id === 'number' &&
+        (candidate.role === 'assistant' || candidate.role === 'user') &&
+        typeof candidate.text === 'string'
+      );
+    })
+    .filter((message) => message.role === 'user' || message.text.trim().length > 0)
+    .slice(-MAX_MESSAGES_PER_SESSION)
+    .map((message) => ({
+      ...message,
+      state: message.role === 'assistant' ? (message.state === 'error' ? 'error' : 'done') : undefined,
+      medicines: Array.isArray(message.medicines) ? message.medicines : undefined,
+    }));
+}
+
+function normalizeStoredSessions(value: unknown): ChatSession[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((session): session is ChatSession => {
+      if (!session || typeof session !== 'object') return false;
+      const candidate = session as Partial<ChatSession>;
+      return (
+        typeof candidate.id === 'string' &&
+        typeof candidate.title === 'string' &&
+        typeof candidate.createdAt === 'string' &&
+        typeof candidate.updatedAt === 'string'
+      );
+    })
+    .map((session) => ({
+      ...session,
+      messages: normalizeStoredMessages(session.messages),
+    }))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, MAX_CHAT_SESSIONS);
+}
+
+function loadChatState(): ChatState {
+  if (typeof window === 'undefined') {
+    const session = createChatSession();
+    return { activeSessionId: session.id, sessions: [session] };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CHAT_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    const sessions = normalizeStoredSessions(parsed?.sessions);
+    const activeSessionId =
+      typeof parsed?.activeSessionId === 'string' ? parsed.activeSessionId : sessions[0]?.id;
+
+    if (sessions.length > 0 && activeSessionId && sessions.some((session) => session.id === activeSessionId)) {
+      return { activeSessionId, sessions };
+    }
+  } catch {
+    // Ignore corrupted local history and start clean.
+  }
+
+  const session = createChatSession();
+  return { activeSessionId: session.id, sessions: [session] };
+}
+
+function pruneChatSessions(sessions: ChatSession[]) {
+  const sorted = [...sessions].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return sorted.slice(0, MAX_CHAT_SESSIONS);
+}
 
 const markdownComponents: Components = {
   h1: ({ children }) => (
@@ -91,30 +215,28 @@ const markdownComponents: Components = {
 };
 
 const fallbackSuggestionChips = [
-  '帮我总结一下药箱现状',
+  '帮我总结一下库存现状',
   '最近快过期的有哪些',
-  '有没有退烧药',
-  '头疼可以吃什么',
+  '有哪些杀菌剂',
+  '有哪些杀虫剂',
 ];
 
 const symptomPromptLibrary = [
-  { keywords: ['退烧', '发烧', '高烧', '感冒'], question: '有没有退烧药' },
-  { keywords: ['头痛', '头疼', '止痛', '偏头痛', '牙痛'], question: '头疼可以吃什么' },
-  { keywords: ['喉咙', '咽喉', '咽痛', '嗓子', '咳嗽'], question: '喉咙不舒服可以用什么' },
-  { keywords: ['胃', '消化', '腹痛', '腹泻', '恶心', '肠胃'], question: '肠胃不舒服可以用什么' },
-  { keywords: ['伤口', '擦伤', '创口', '消毒'], question: '有处理伤口的药吗' },
-  { keywords: ['皮肤', '湿疹', '瘙痒', '过敏'], question: '皮肤不舒服可以用什么' },
-  { keywords: ['眼', '眼干', '眼痛'], question: '眼睛不舒服能用什么' },
-  { keywords: ['维生素', '补剂', '免疫'], question: '有哪些维生素或补剂' },
+  { keywords: ['杀虫', '蚜虫', '飞虱', '蓟马', '粉虱', '螟虫'], question: '有哪些杀虫剂' },
+  { keywords: ['杀菌', '病害', '纹枯', '赤霉', '白粉', '锈病', '霜霉'], question: '有哪些杀菌剂' },
+  { keywords: ['除草', '杂草', '禾本科', '阔叶'], question: '有哪些除草剂' },
+  { keywords: ['杀螨', '红蜘蛛', '螨'], question: '有哪些杀螨剂' },
+  { keywords: ['腐植酸', '水溶肥', '叶面肥', '氨基酸', '磷酸二氢钾'], question: '有哪些肥料或叶面肥' },
+  { keywords: ['拌种', '种衣', '包衣'], question: '有哪些拌种或种衣剂' },
 ];
 
 const categoryPromptLibrary = [
-  { keywords: ['感冒', '发烧'], question: '感冒发烧类药品有哪些' },
-  { keywords: ['外伤'], question: '外伤处理用品有哪些' },
-  { keywords: ['慢性病'], question: '慢性病常备药有哪些' },
-  { keywords: ['维生素', '补剂'], question: '有哪些维生素或补剂' },
-  { keywords: ['皮肤'], question: '皮肤外用药有哪些' },
-  { keywords: ['消化'], question: '消化系统用药有哪些' },
+  { keywords: ['杀虫'], question: '有哪些杀虫剂' },
+  { keywords: ['杀菌'], question: '有哪些杀菌剂' },
+  { keywords: ['除草'], question: '有哪些除草剂' },
+  { keywords: ['杀螨'], question: '有哪些杀螨剂' },
+  { keywords: ['调节'], question: '有哪些植物生长调节剂' },
+  { keywords: ['肥料', '叶面肥'], question: '有哪些肥料或叶面肥' },
 ];
 
 function addSuggestion(suggestions: string[], seen: Set<string>, question: string) {
@@ -157,7 +279,7 @@ function buildSuggestionChips(medicines: Medicine[], timezone: string, expiringD
   const unknownExpiryCount = medicineRecords.filter(({ status }) => status === 'unknown').length;
 
   if (expiredCount > 0) {
-    addSuggestion(suggestions, seen, '哪些药已经过期了');
+    addSuggestion(suggestions, seen, '哪些产品已经过期了');
   }
 
   if (expiringCount > 0) {
@@ -165,7 +287,7 @@ function buildSuggestionChips(medicines: Medicine[], timezone: string, expiringD
   }
 
   if (unknownExpiryCount > 0) {
-    addSuggestion(suggestions, seen, '哪些药还没填写有效期');
+    addSuggestion(suggestions, seen, '哪些产品还没填写有效期');
   }
 
   const matchedSymptoms = symptomPromptLibrary
@@ -202,10 +324,10 @@ function buildSuggestionChips(medicines: Medicine[], timezone: string, expiringD
         entry.keywords.some((keyword) => category.includes(keyword))
       )?.question;
 
-      addSuggestion(suggestions, seen, mappedPrompt || `药箱里有哪些${category}类药品`);
+      addSuggestion(suggestions, seen, mappedPrompt || `库存里有哪些${category}类产品`);
     });
 
-  addSuggestion(suggestions, seen, '帮我总结一下药箱现状');
+  addSuggestion(suggestions, seen, '帮我总结一下库存现状');
 
   if (suggestions.length < 4) {
     fallbackSuggestionChips.forEach((chip) => {
@@ -266,7 +388,7 @@ function ThinkingBubble() {
         <ThinkingDots />
       </div>
       <div className="mt-2 text-[13px] leading-7 text-ink2">
-        正在整理药箱数据、筛选相关药品和注意事项。
+        正在整理库存数据、筛选相关产品和到期状态。
       </div>
       </div>
     </div>
@@ -341,7 +463,7 @@ function AssistantMedicineResults({
       {totalPages > 1 && (
         <div className="flex items-center justify-between gap-3 rounded-[10px] border border-border/40 bg-surface2/70 px-3 py-2 text-[11px] text-ink2">
           <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink3">
-            第 {currentPage + 1} / {totalPages} 页 · 共 {medicines.length} 个药品
+            第 {currentPage + 1} / {totalPages} 页 · 共 {medicines.length} 个产品
           </div>
 
           <div className="flex items-center gap-2">
@@ -453,8 +575,8 @@ function QuestionComposer({
                 ? '正在准备新的回答…'
                 : '继续提问会中止当前回答…'
               : isEmpty
-                ? '问问药箱里有什么，或直接描述症状'
-                : '问问你的药箱…'
+                ? '问问库存里有什么，或描述防治对象'
+                : '问问你的库存…'
           }
           className={`w-full bg-transparent outline-none placeholder:text-ink3 ${
             isEmpty ? 'text-[16px] text-ink md:text-[18px]' : 'text-[13px] text-ink'
@@ -492,10 +614,10 @@ function AiUsageNotice({ compact = false }: { compact?: boolean }) {
       }`}
     >
       <p>
-        AI 查询会把你的问题和当前药箱数据发送到已配置的模型接口。请勿输入不想外发的敏感信息。
+        AI 查询会把你的问题和当前库存数据发送到已配置的模型接口。请勿输入不想外发的敏感信息。
       </p>
       <p>
-        回答仅用于药箱整理与检索，不替代医生或药师的诊断、处方或用药建议。
+        回答仅用于库存整理与检索，不替代农药标签、登记信息或农技人员建议。
       </p>
     </DismissibleNotice>
   );
@@ -519,11 +641,11 @@ function OnboardingView({
       <div className="relative z-10 flex flex-col items-center text-center">
 
         <h2 className="text-[26px] font-medium leading-tight text-ink md:text-[40px]">
-          药箱还是空的
+          库存还是空的
         </h2>
 
         <p className="mt-3 max-w-[360px] text-[13px] leading-relaxed text-ink2 md:text-[15px]">
-          添加第一个药品后，就可以用 AI 智能查询了
+          添加第一个农药或农资产品后，就可以用 AI 智能查询了
         </p>
 
         {onAddMedicine && (
@@ -533,7 +655,7 @@ function OnboardingView({
             className="mt-8 inline-flex items-center gap-2 rounded-full bg-accent px-7 py-3 text-[14px] font-medium text-white shadow-lg transition-all duration-200 hover:bg-accent-hover hover:shadow-xl active:scale-[0.97]"
           >
             <Plus className="h-4 w-4" strokeWidth={2.5} />
-            添加第一个药品
+            添加第一个产品
           </button>
         )}
 
@@ -603,14 +725,111 @@ function CelebrationParticles() {
   );
 }
 
-export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLoading, onAddMedicine }: AiPanelProps) {
+function ChatHistorySidebar({
+  sessions,
+  activeSessionId,
+  loading,
+  onNewChat,
+  onSelectSession,
+  onDeleteSession,
+}: {
+  sessions: ChatSession[];
+  activeSessionId: string;
+  loading: boolean;
+  onNewChat: () => void;
+  onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
+}) {
+  return (
+    <aside className="hidden w-[248px] shrink-0 border-r border-border/40 bg-surface2/45 md:flex md:flex-col">
+      <div className="flex items-center justify-between gap-3 border-b border-border/40 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium text-ink">
+          <MessageSquare className="h-4 w-4 text-ink3" strokeWidth={1.9} />
+          <span>聊天列表</span>
+        </div>
+        <button
+          type="button"
+          onClick={onNewChat}
+          aria-label="新建聊天"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-ink2 transition-colors hover:border-accent/40 hover:text-accent"
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.2} />
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        {sessions.map((session) => {
+          const active = session.id === activeSessionId;
+          const lastMessage = session.messages[session.messages.length - 1]?.text
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          return (
+            <div key={session.id} className="group relative">
+              <button
+                type="button"
+                onClick={() => onSelectSession(session.id)}
+                disabled={loading && active}
+                className={`mb-1 w-full rounded-[8px] px-3 py-2.5 text-left transition-colors ${
+                  active
+                    ? 'bg-ink text-bg shadow-sm'
+                    : 'text-ink2 hover:bg-surface hover:text-ink'
+                }`}
+              >
+                <div className="truncate text-[12px] font-medium">{session.title}</div>
+                <div
+                  className={`mt-1 truncate text-[10px] ${
+                    active ? 'text-bg/70' : 'text-ink3'
+                  }`}
+                >
+                  {lastMessage || '还没有消息'}
+                </div>
+              </button>
+
+              {sessions.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDeleteSession(session.id);
+                  }}
+                  aria-label={`删除聊天 ${session.title}`}
+                  className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full opacity-0 transition-all group-hover:opacity-100 ${
+                    active
+                      ? 'bg-bg/15 text-bg/80 hover:bg-bg/25'
+                      : 'bg-surface2 text-ink3 hover:bg-surface hover:text-status-danger'
+                  }`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
+export function AiPanel({
+  initialQuestion,
+  settings,
+  medicines = [],
+  medicinesLoading,
+  onAddMedicine,
+  onInventoryChange,
+}: AiPanelProps) {
   const { timezone } = useTimezone();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatState, setChatState] = useState<ChatState>(() => loadChatState());
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const messageIdRef = useRef(1);
   const activeControllerRef = useRef<AbortController | null>(null);
+  const activeSession =
+    chatState.sessions.find((session) => session.id === chatState.activeSessionId) ||
+    chatState.sessions[0];
+  const messages = activeSession?.messages || [];
   const hasConversation = messages.length > 0;
   const suggestionChips = buildSuggestionChips(medicines, timezone, settings.expiringDays);
 
@@ -618,10 +837,88 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
   const prevCountRef = useRef(medicines.length);
   const loadSettledRef = useRef(!medicinesLoading);
 
-  const updateMessage = (id: number, updater: (message: ChatMessage) => ChatMessage) => {
-    setMessages((current) =>
-      current.map((message) => (message.id === id ? updater(message) : message))
+  const updateChatState = (updater: (current: ChatState) => ChatState) => {
+    setChatState((current) => {
+      const next = updater(current);
+
+      if (next.sessions.length > 0) {
+        return {
+          activeSessionId: next.activeSessionId,
+          sessions: pruneChatSessions(next.sessions),
+        };
+      }
+
+      const session = createChatSession();
+      return { activeSessionId: session.id, sessions: [session] };
+    });
+  };
+
+  const updateSessionMessages = (
+    sessionId: string,
+    updater: (messages: ChatMessage[], session: ChatSession) => ChatMessage[],
+  ) => {
+    const now = new Date().toISOString();
+
+    updateChatState((current) => ({
+      ...current,
+      sessions: current.sessions.map((session) =>
+        session.id === sessionId
+          ? {
+              ...session,
+              messages: updater(session.messages, session).slice(-MAX_MESSAGES_PER_SESSION),
+              updatedAt: now,
+            }
+          : session,
+      ),
+    }));
+  };
+
+  const updateMessage = (
+    sessionId: string,
+    id: number,
+    updater: (message: ChatMessage) => ChatMessage,
+  ) => {
+    updateSessionMessages(sessionId, (current) =>
+      current.map((message) => (message.id === id ? updater(message) : message)),
     );
+  };
+
+  const createNewChat = () => {
+    activeControllerRef.current?.abort();
+    setLoading(false);
+    const session = createChatSession();
+    updateChatState((current) => ({
+      activeSessionId: session.id,
+      sessions: [session, ...current.sessions],
+    }));
+  };
+
+  const selectChatSession = (sessionId: string) => {
+    activeControllerRef.current?.abort();
+    setLoading(false);
+    updateChatState((current) => ({
+      ...current,
+      activeSessionId: sessionId,
+    }));
+  };
+
+  const deleteChatSession = (sessionId: string) => {
+    activeControllerRef.current?.abort();
+    setLoading(false);
+    updateChatState((current) => {
+      const remaining = current.sessions.filter((session) => session.id !== sessionId);
+
+      if (remaining.length === 0) {
+        const session = createChatSession();
+        return { activeSessionId: session.id, sessions: [session] };
+      }
+
+      return {
+        activeSessionId:
+          current.activeSessionId === sessionId ? remaining[0].id : current.activeSessionId,
+        sessions: remaining,
+      };
+    });
   };
 
   const sendQuestion = async (question: string) => {
@@ -634,6 +931,7 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
     activeControllerRef.current?.abort();
     const controller = new AbortController();
     activeControllerRef.current = controller;
+    const targetSessionId = chatState.activeSessionId;
 
     const userMessage: ChatMessage = {
       id: messageIdRef.current++,
@@ -648,7 +946,25 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
       state: 'thinking',
     };
 
-    setMessages((current) => [...current, userMessage, assistantMessage]);
+    updateChatState((current) => {
+      const now = new Date().toISOString();
+
+      return {
+        ...current,
+        sessions: current.sessions.map((session) =>
+          session.id === targetSessionId
+            ? {
+                ...session,
+                title: session.messages.length === 0 ? buildChatTitle(nextQuestion) : session.title,
+                updatedAt: now,
+                messages: [...session.messages, userMessage, assistantMessage].slice(
+                  -MAX_MESSAGES_PER_SESSION,
+                ),
+              }
+            : session,
+        ),
+      };
+    });
     setInput('');
     setLoading(true);
 
@@ -664,7 +980,7 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
           }
 
           receivedChunk = true;
-          updateMessage(assistantMessage.id, (message) => ({
+          updateMessage(targetSessionId, assistantMessage.id, (message) => ({
             ...message,
             text: message.text + event.content,
             state: 'streaming',
@@ -677,15 +993,19 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
         return;
       }
 
-      updateMessage(assistantMessage.id, (message) => ({
+      updateMessage(targetSessionId, assistantMessage.id, (message) => ({
         ...message,
         text: response.answer,
         medicines: response.medicines,
         state: 'done',
       }));
+
+      if (response.inventoryChanged) {
+        void onInventoryChange?.();
+      }
     } catch (error) {
       if (controller.signal.aborted) {
-        setMessages((current) =>
+        updateSessionMessages(targetSessionId, (current) =>
           current.flatMap((message) => {
             if (message.id !== assistantMessage.id) {
               return [message];
@@ -709,19 +1029,23 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
             return;
           }
 
-          updateMessage(assistantMessage.id, (message) => ({
+          updateMessage(targetSessionId, assistantMessage.id, (message) => ({
             ...message,
             text: response.answer,
             medicines: response.medicines,
             state: 'done',
           }));
+
+          if (response.inventoryChanged) {
+            void onInventoryChange?.();
+          }
           return;
         } catch (fallbackError) {
           if (controller.signal.aborted) {
             return;
           }
 
-          updateMessage(assistantMessage.id, (message) => ({
+          updateMessage(targetSessionId, assistantMessage.id, (message) => ({
             ...message,
             text: `抱歉，出现了问题：${
               fallbackError instanceof Error ? fallbackError.message : '未知错误'
@@ -733,7 +1057,7 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
         }
       }
 
-      updateMessage(assistantMessage.id, (message) => ({
+      updateMessage(targetSessionId, assistantMessage.id, (message) => ({
         ...message,
         text: `${message.text.trimEnd()}\n\n> 连接中断，以下是已生成的内容。`,
         state: 'error',
@@ -745,6 +1069,26 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
       }
     }
   };
+
+  useEffect(() => {
+    const maxMessageId = chatState.sessions.reduce((max, session) => {
+      const sessionMax = session.messages.reduce(
+        (messageMax, message) => Math.max(messageMax, message.id),
+        0,
+      );
+      return Math.max(max, sessionMax);
+    }, 0);
+
+    messageIdRef.current = Math.max(messageIdRef.current, maxMessageId + 1);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatState));
+  }, [chatState]);
 
   useEffect(() => {
     if (initialQuestion?.trim()) {
@@ -804,7 +1148,17 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
   }, [transitionPhase]);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <section className="flex min-h-0 flex-1 overflow-hidden">
+      <ChatHistorySidebar
+        sessions={chatState.sessions}
+        activeSessionId={chatState.activeSessionId}
+        loading={loading}
+        onNewChat={createNewChat}
+        onSelectSession={selectChatSession}
+        onDeleteSession={deleteChatSession}
+      />
+
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {hasConversation ? (
         <>
           <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -891,6 +1245,7 @@ export function AiPanel({ initialQuestion, settings, medicines = [], medicinesLo
           </div>
         </div>
       )}
+      </section>
     </section>
   );
 }

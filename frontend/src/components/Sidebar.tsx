@@ -19,7 +19,7 @@ export function Sidebar({
     <div className="flex h-full flex-col gap-4">
       {onClose && (
         <div className="flex items-center justify-between px-4 pt-4 md:hidden">
-          <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink3">药品筛选</div>
+          <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink3">库存筛选</div>
           <button
             type="button"
             onClick={onClose}
@@ -40,7 +40,7 @@ export function Sidebar({
               <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink3">
                 分类筛选
               </div>
-              <p className="mt-1 text-[12px] leading-6 text-ink2">按使用场景浏览药品。</p>
+              <p className="mt-1 text-[12px] leading-6 text-ink2">按农药类别浏览库存。</p>
             </div>
           </div>
         </div>
@@ -58,7 +58,7 @@ export function Sidebar({
                 : 'bg-surface3 text-ink2 hover:bg-surface2 hover:text-ink'
             }`}
           >
-            <span className="font-medium">全部药品</span>
+            <span className="font-medium">全部库存</span>
             <span
               className={`rounded-full px-2.5 py-1 font-mono text-[10px] ${
                 !selectedCategory ? 'bg-white/15 text-white' : 'bg-surface text-ink3'

@@ -2,6 +2,7 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
+import { inferAgrochemicalCategory, normalizeAgrochemicalCategory } from './agrochemical';
 import { getDb } from './db/client';
 import { DEFAULT_CATEGORIES } from './db/schema';
 import {
@@ -59,68 +60,13 @@ function getMergedCategories() {
       `SELECT DISTINCT category FROM medicines WHERE category IS NOT NULL AND category != '' ORDER BY category ASC`,
     )
     .all() as { category: string }[];
-  const merged = [...DEFAULT_CATEGORIES];
+  const merged: string[] = [...DEFAULT_CATEGORIES];
   for (const { category } of rows) {
     if (!merged.includes(category)) {
       merged.push(category);
     }
   }
   return merged;
-}
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  '感冒发烧': [
-    '布洛芬', '对乙酰氨基酚', '扑热息痛', '感冒', '退烧', '发烧', '头痛', '止痛',
-    '阿司匹林', '泰诺', '美林', '连花清瘟', '板蓝根', '感康', '新康泰克', '白加黑',
-    '快克', '抗病毒', '咳嗽', '止咳', '化痰', '川贝', '枇杷', '右美沙芬',
-    'ibuprofen', 'paracetamol', 'acetaminophen', 'aspirin',
-  ],
-  '外伤处理': [
-    '创可贴', '碘伏', '酒精', '消毒', '纱布', '绷带', '棉签', '红药水', '紫药水',
-    '云南白药', '止血', '伤口', '碘酒', '双氧水', '医用胶带',
-    'band-aid', 'bandage', 'iodine',
-  ],
-  '慢性病用药': [
-    '降压', '降糖', '胰岛素', '二甲双胍', '高血压', '糖尿病', '心血管',
-    '他汀', '阿托伐', '硝苯地平', '氨氯地平', '缬沙坦', '降脂',
-    '甲状腺', '优甲乐', '左甲状腺',
-  ],
-  '维生素补剂': [
-    '维生素', '维C', '维B', '钙片', '鱼油', 'DHA', '补铁', '叶酸', '泡腾片',
-    '补锌', '多维', '善存', '钙尔奇', 'vitamin', '辅酶Q10', '褪黑素',
-  ],
-  '皮肤外用': [
-    '药膏', '软膏', '乳膏', '凝胶', '皮炎', '湿疹', '止痒',
-    '红霉素软膏', '百多邦', '派瑞松', '炉甘石', '芦荟胶', '痤疮', '脚气',
-    '达克宁', '皮康王', '风油精', '花露水', '防晒',
-  ],
-  '消化系统': [
-    '藿香正气', '健胃消食', '消化', '胃痛', '拉肚子', '腹泻', '便秘', '开塞露',
-    '蒙脱石', '益生菌', '肠胃', '奥美拉唑', '吗丁啉', '胃药', '止泻',
-    '乳酸菌', '整肠', '泻药',
-  ],
-};
-
-function inferCategory(name: string, usageDesc?: string): string {
-  const text = `${name} ${usageDesc || ''}`.toLowerCase();
-
-  let bestCategory = '';
-  let bestScore = 0;
-
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    let score = 0;
-    for (const kw of keywords) {
-      if (text.includes(kw.toLowerCase())) {
-        score += 1;
-      }
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      bestCategory = category;
-    }
-  }
-
-  return bestCategory;
 }
 
 function computeStats(expiringDays = 30) {
@@ -173,7 +119,7 @@ function getTimezoneMeta() {
     configured,
     warning: configured
       ? undefined
-      : '时区尚未初始化。MedKit 当前使用 UTC 而不是服务器本地时区。请先使用 set_timezone 工具完成初始化。',
+      : '时区尚未初始化。当前库存系统使用 UTC 而不是服务器本地时区。请先使用 set_timezone 工具完成初始化。',
   };
 }
 
@@ -216,7 +162,7 @@ const server = new McpServer({
 
 server.tool(
   'get_settings',
-  '获取当前与 MCP 使用相关的 MedKit 设置，包括业务时区是否已经初始化。',
+  '获取当前与 MCP 使用相关的库存系统设置，包括业务时区是否已经初始化。',
   {},
   async () => {
     try {
@@ -226,7 +172,7 @@ server.tool(
         configured: meta.configured,
         guidance: meta.configured
           ? '时区已配置，后续的过期判断、AI 中的“今天”以及通知调度都会使用这个时区。'
-          : '时区尚未初始化，OpenMedKit 当前使用 UTC 而不是服务器本地时区。请运行 set_timezone，并传入 IANA 时区，例如 "Asia/Shanghai"。',
+          : '时区尚未初始化，当前库存系统使用 UTC 而不是服务器本地时区。请运行 set_timezone，并传入 IANA 时区，例如 "Asia/Shanghai"。',
       });
     } catch (err) {
       return errorResult(err instanceof Error ? err.message : '获取设置失败');
@@ -236,7 +182,7 @@ server.tool(
 
 server.tool(
   'set_timezone',
-  '初始化或更新 OpenMedKit 的业务时区。这个时区会用于过期判断、AI 中的“今天”以及通知调度。',
+  '初始化或更新库存系统的业务时区。这个时区会用于过期判断、AI 中的“今天”以及通知调度。',
   {
     timezone: z
       .string()
@@ -274,7 +220,7 @@ server.tool(
 
 server.tool(
   'list_medicines',
-  'List all medicines in the medkit. Supports filtering by category, expiry status, or name search.',
+  'List all pesticide/agrochemical inventory items. Supports filtering by category, expiry status, or name search.',
   {
     category: z.string().optional().describe('Filter by category name'),
     status: z.enum(['expired', 'expiring', 'ok']).optional().describe('Filter by expiry status'),
@@ -323,8 +269,8 @@ server.tool(
 
 server.tool(
   'get_medicine',
-  'Get a single medicine by its ID.',
-  { id: z.number().describe('Medicine ID') },
+  'Get a single pesticide/agrochemical inventory item by its ID.',
+  { id: z.number().describe('Inventory item ID') },
   async ({ id }) => {
     try {
       const db = getDb();
@@ -343,20 +289,20 @@ server.tool(
 
 server.tool(
   'add_medicine',
-  `Add a new medicine to the medkit. Only "name" is required; all other fields are optional.
+  `Add a new pesticide/agrochemical inventory item. Only "name" is required; all other fields are optional.
 IMPORTANT: Always provide "category" when possible. Available categories: ${DEFAULT_CATEGORIES.join('、')}.
-If category is omitted, the system will attempt to auto-classify based on the medicine name and usage description.
+If category is omitted, the system will attempt to auto-classify based on the active ingredient/product name and usage description.
 Also try to fill in brand, name_en, spec, usage_desc, and other fields for better data quality.`,
   {
-    name: z.string().trim().min(1, 'Medicine name is required').describe('Medicine name (required)'),
-    brand: z.string().optional().describe('Brand or product name'),
-    name_en: z.string().optional().describe('English name'),
-    spec: z.string().optional().describe('Specification, e.g. 300mg/粒'),
-    quantity: z.string().optional().describe('Remaining quantity, e.g. 20粒'),
+    name: z.string().trim().min(1, 'Product name is required').describe('Product name or active ingredient combination (required)'),
+    brand: z.string().optional().describe('Brand, trade name, manufacturer brand, or product series'),
+    name_en: z.string().optional().describe('English name or active ingredient English name'),
+    spec: z.string().optional().describe('Content, formulation, or package specification, e.g. 32%悬浮剂, 100g/瓶'),
+    quantity: z.string().optional().describe('Remaining inventory, e.g. 20瓶, 3袋'),
     expires_at: z.string().optional().describe('Expiry date in YYYY-MM-DD format'),
     category: z.string().optional().describe(`Category. Choose from: ${DEFAULT_CATEGORIES.join(', ')}. Or create a new reasonable category if none fits.`),
-    usage_desc: z.string().optional().describe('Usage description / indications'),
-    location: z.string().optional().describe('Storage location, e.g. 药箱 A层'),
+    usage_desc: z.string().optional().describe('Target pest/disease/weed, crop scenario, or inventory usage description'),
+    location: z.string().optional().describe('Storage location, e.g. 农药库 A架'),
     notes: z.string().optional().describe('Additional notes'),
   },
   async (params) => {
@@ -364,12 +310,18 @@ Also try to fill in brand, name_en, spec, usage_desc, and other fields for bette
       const db = getDb();
       let category = params.category?.trim() || null;
 
-      if (!category) {
-        const inferred = inferCategory(params.name, params.usage_desc);
-        if (inferred) {
-          category = inferred;
-        }
-      }
+      category =
+        normalizeAgrochemicalCategory(
+          category,
+          params.name,
+          params.brand,
+          params.name_en,
+          params.spec,
+          params.usage_desc,
+          params.notes,
+        ) ||
+        inferAgrochemicalCategory(params.name, params.usage_desc) ||
+        null;
 
       const result = db
         .prepare(
@@ -402,14 +354,14 @@ Also try to fill in brand, name_en, spec, usage_desc, and other fields for bette
 
 server.tool(
   'update_medicine',
-  'Update an existing medicine by ID. Only provided fields will be changed.',
+  'Update an existing pesticide/agrochemical inventory item by ID. Only provided fields will be changed.',
   {
-    id: z.number().describe('Medicine ID (required)'),
-    name: z.string().optional().describe('Medicine name'),
-    brand: z.string().optional().describe('Brand or product name'),
-    name_en: z.string().optional().describe('English name'),
-    spec: z.string().optional().describe('Specification'),
-    quantity: z.string().optional().describe('Remaining quantity'),
+    id: z.number().describe('Inventory item ID (required)'),
+    name: z.string().optional().describe('Product name or active ingredient combination'),
+    brand: z.string().optional().describe('Brand or trade name'),
+    name_en: z.string().optional().describe('English name or active ingredient English name'),
+    spec: z.string().optional().describe('Content, formulation, or package specification'),
+    quantity: z.string().optional().describe('Remaining inventory'),
     expires_at: z.string().optional().describe('Expiry date in YYYY-MM-DD format'),
     category: z.string().optional().describe('Category'),
     usage_desc: z.string().optional().describe('Usage description'),
@@ -426,7 +378,7 @@ server.tool(
       }
 
       if (fields.name !== undefined && !fields.name.trim()) {
-        return errorResult('Medicine name cannot be empty');
+        return errorResult('Product name cannot be empty');
       }
 
       const setClauses: string[] = [];
@@ -435,7 +387,27 @@ server.tool(
       for (const [key, value] of Object.entries(fields)) {
         if (value !== undefined) {
           setClauses.push(`${key} = ?`);
-          params.push(typeof value === 'string' ? value.trim() || null : value);
+          if (key === 'category') {
+            params.push(
+              normalizeAgrochemicalCategory(
+                typeof value === 'string' ? value : '',
+                fields.name,
+                fields.brand,
+                fields.name_en,
+                fields.spec,
+                fields.usage_desc,
+                fields.notes,
+                existing.name,
+                existing.brand,
+                existing.name_en,
+                existing.spec,
+                existing.usage_desc,
+                existing.notes,
+              ) || null,
+            );
+          } else {
+            params.push(typeof value === 'string' ? value.trim() || null : value);
+          }
         }
       }
 
@@ -456,8 +428,8 @@ server.tool(
 
 server.tool(
   'delete_medicine',
-  'Delete a medicine by ID.',
-  { id: z.number().describe('Medicine ID') },
+  'Delete an inventory item by ID.',
+  { id: z.number().describe('Inventory item ID') },
   async ({ id }) => {
     try {
       const db = getDb();
@@ -476,7 +448,7 @@ server.tool(
 
 server.tool(
   'get_stats',
-  'Get summary statistics of the medkit: total count, expired, expiring, ok, and category breakdown.',
+  'Get summary statistics of the pesticide/agrochemical inventory: total count, expired, expiring, ok, and category breakdown.',
   {
     expiring_days: z.number().positive().optional().describe('Days threshold for "expiring" status (default: 30)'),
   },
@@ -491,7 +463,7 @@ server.tool(
 
 server.tool(
   'search_medicines',
-  'Search medicines by keyword across name, brand, English name, usage description, and notes fields.',
+  'Search pesticide/agrochemical inventory by keyword across name, brand, English name, usage description, and notes fields.',
   { query: z.string().describe('Search keyword') },
   async ({ query }) => {
     try {
@@ -519,7 +491,7 @@ server.tool(
 server.resource(
   'settings',
   'medkit://settings',
-  { description: '当前与 MedKit MCP 使用相关的设置，包括业务时区状态。', mimeType: 'application/json' },
+  { description: '当前与库存 MCP 使用相关的设置，包括业务时区状态。', mimeType: 'application/json' },
   async () => {
     const meta = getTimezoneMeta();
 
@@ -545,7 +517,7 @@ server.resource(
 server.resource(
   'medicines',
   'medkit://medicines',
-  { description: 'Full list of all medicines in the medkit as JSON', mimeType: 'application/json' },
+  { description: 'Full list of all pesticide/agrochemical inventory items as JSON', mimeType: 'application/json' },
   async () => {
     const db = getDb();
     const rows = db

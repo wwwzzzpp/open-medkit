@@ -1,5 +1,6 @@
 import { getDb } from '../db/client';
 import { DEFAULT_CATEGORIES } from '../db/schema';
+import { normalizeAgrochemicalCategory } from '../agrochemical';
 import {
   getDateBoundaries as getTimezoneDateBoundaries,
   getStoredTimezone,
@@ -84,17 +85,25 @@ export function getMedicineExpiryState(
 }
 
 export function normalizeMedicineDraftPayload(parsed: Record<string, unknown>) {
+  const name = typeof parsed.name === 'string' ? parsed.name : '';
+  const brand = typeof parsed.brand === 'string' ? parsed.brand : '';
+  const nameEn = typeof parsed.name_en === 'string' ? parsed.name_en : '';
+  const spec = typeof parsed.spec === 'string' ? parsed.spec : '';
+  const category = typeof parsed.category === 'string' ? parsed.category : '';
+  const usageDesc = typeof parsed.usage_desc === 'string' ? parsed.usage_desc : '';
+  const notes = typeof parsed.notes === 'string' ? parsed.notes : '';
+
   return {
-    name: typeof parsed.name === 'string' ? parsed.name : '',
-    brand: typeof parsed.brand === 'string' ? parsed.brand : '',
-    name_en: typeof parsed.name_en === 'string' ? parsed.name_en : '',
-    spec: typeof parsed.spec === 'string' ? parsed.spec : '',
+    name,
+    brand,
+    name_en: nameEn,
+    spec,
     quantity: typeof parsed.quantity === 'string' ? parsed.quantity : '',
     expires_at: typeof parsed.expires_at === 'string' ? parsed.expires_at : '',
-    category: typeof parsed.category === 'string' ? parsed.category : '',
-    usage_desc: typeof parsed.usage_desc === 'string' ? parsed.usage_desc : '',
+    category: normalizeAgrochemicalCategory(category, name, brand, nameEn, spec, usageDesc, notes),
+    usage_desc: usageDesc,
     location: typeof parsed.location === 'string' ? parsed.location : '',
-    notes: typeof parsed.notes === 'string' ? parsed.notes : '',
+    notes,
   };
 }
 

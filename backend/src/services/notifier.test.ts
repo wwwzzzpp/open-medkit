@@ -38,7 +38,7 @@ describe('buildNotificationMessage', () => {
       [],
       '2026-03-29',
     );
-    expect(message).toContain('药品过期提醒');
+    expect(message).toContain('库存到期提醒');
   });
 
   it('calculates days correctly', () => {
@@ -65,6 +65,6 @@ describe('buildNotificationMessage', () => {
     const message = buildNotificationMessage(expired, [], '2026-03-29', 'plain');
     expect(message).not.toContain('<b>');
     expect(message).not.toContain('**');
-    expect(message).toContain('药品过期提醒');
+    expect(message).toContain('库存到期提醒');
   });
 });

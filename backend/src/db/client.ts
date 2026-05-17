@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 
+import { normalizeAgrochemicalCategory } from '../agrochemical';
 import { schema } from './schema';
 
 export type SqliteDatabase = Database.Database;
@@ -15,6 +16,45 @@ function ensureMedicineColumns(database: SqliteDatabase) {
   if (!columnNames.has('brand')) {
     database.prepare('ALTER TABLE medicines ADD COLUMN brand TEXT').run();
   }
+}
+
+function backfillAgrochemicalCategories(database: SqliteDatabase) {
+  const rows = database
+    .prepare(
+      `SELECT id, name, brand, name_en, spec, category, usage_desc, notes
+       FROM medicines`,
+    )
+    .all() as Array<{
+    id: number;
+    name: string;
+    brand: string | null;
+    name_en: string | null;
+    spec: string | null;
+    category: string | null;
+    usage_desc: string | null;
+    notes: string | null;
+  }>;
+
+  const update = database.prepare('UPDATE medicines SET category = ? WHERE id = ?');
+  const transaction = database.transaction(() => {
+    rows.forEach((row) => {
+      const normalized = normalizeAgrochemicalCategory(
+        row.category,
+        row.name,
+        row.brand,
+        row.name_en,
+        row.spec,
+        row.usage_desc,
+        row.notes,
+      );
+
+      if (normalized && normalized !== (row.category || '')) {
+        update.run(normalized, row.id);
+      }
+    });
+  });
+
+  transaction();
 }
 
 export function getDb(): SqliteDatabase {
@@ -32,6 +72,7 @@ export function getDb(): SqliteDatabase {
   db.pragma('foreign_keys = ON');
   db.exec(schema);
   ensureMedicineColumns(db);
+  backfillAgrochemicalCategories(db);
 
   return db;
 }

@@ -55,11 +55,11 @@ import { SelectMenu } from './SelectMenu';
 
 const homeTabOptions = [
   { value: 'ai', label: 'AI 检索', description: '打开应用后直接进入对话问答。' },
-  { value: 'manual', label: '药品列表', description: '打开应用后先看库存和筛选列表。' },
+  { value: 'manual', label: '库存列表', description: '打开应用后先看库存和筛选列表。' },
 ] as const;
 
 const listViewOptions = [
-  { value: 'grid', label: '卡片视图', description: '适合快速浏览药品关键信息。' },
+  { value: 'grid', label: '卡片视图', description: '适合快速浏览库存关键信息。' },
   { value: 'list', label: '表格视图', description: '一屏看到更多字段和明细条目。' },
 ] as const;
 
@@ -129,8 +129,8 @@ const tabDescriptions: Record<SettingsTab, string> = {
   general: '调整界面主题、默认进入页面、列表样式和数据管理选项。',
   notifications: '管理 Telegram、Discord、飞书等提醒渠道与每日过期通知的发送时间。',
   about: '产品简介、功能亮点与技术栈。',
-  privacy: '药箱数据的存储方式与 AI / 通知功能的外发说明。',
-  disclaimer: '使用限制、AI 输出局限性与用药安全提醒。',
+  privacy: '库存数据的存储方式与 AI / 通知功能的外发说明。',
+  disclaimer: '使用限制、AI 输出局限性与农药安全提醒。',
 };
 
 const settingsTabs = [
@@ -960,7 +960,7 @@ export function SettingsModal({
                     />
                     <div>
                       <h3 className="text-[18px] font-semibold leading-tight text-ink sm:text-[20px]">
-                        Open MedKit
+                        农药库存
                       </h3>
                       <p className="mt-0.5 font-mono text-[10px] tracking-wide text-ink3">
                         MIT License · Open Source 
@@ -979,18 +979,18 @@ export function SettingsModal({
                 </div>
 
                 <p className="text-[13px] leading-[1.7] text-ink2">
-                  用自然语言录入和检索家中常备药，AI 自动提取结构化信息并追踪有效期，让你不再忘药、过期、找不到。
+                  用自然语言录入和检索农药、肥料与农资库存，AI 自动提取结构化信息并追踪有效期，让库存分类和到期管理更清楚。
                 </p>
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   {[
-                    { icon: MessageSquareText, title: '说一句话就入库', desc: 'AI 提取名称、规格、有效期，确认即入库' },
-                    { icon: Search, title: '问一句话就找药', desc: '像聊天一样检索你的药箱' },
-                    { icon: Bell, title: '过期自动提醒', desc: '到期药品高亮标记，支持 Telegram / Discord / 飞书推送' },
+                    { icon: MessageSquareText, title: '说一句话就入库', desc: 'AI 提取成分、规格、分类、有效期，确认即入库' },
+                    { icon: Search, title: '问一句话就查库存', desc: '像聊天一样检索农药和农资库存' },
+                    { icon: Bell, title: '到期自动提醒', desc: '到期产品高亮标记，支持 Telegram / Discord / 飞书推送' },
                     {
                       icon: Server,
                       title: 'MCP Server',
-                      desc: '内置 MCP Server，通过 Claude Code, OpenClaw 等直接管理药箱',
+                      desc: '内置 MCP Server，通过 Claude Code, OpenClaw 等直接管理库存',
                     },
                   ].map((f) => (
                     <div
@@ -1076,7 +1076,7 @@ export function SettingsModal({
                         className="bg-status-warn-bg/40 px-3 py-2.5 leading-[1.6]"
                       >
                         <p>
-                          启用 Telegram 后，提醒消息会包含药品名称、到期日期和状态，并发送到 Telegram
+                          启用 Telegram 后，提醒消息会包含产品名称、到期日期和状态，并发送到 Telegram
                           Bot API 以及你绑定的聊天会话。请仅绑定你信任的账号或群组。
                         </p>
                       </DismissibleNotice>
@@ -1114,7 +1114,7 @@ export function SettingsModal({
                                 buttonClassName={inputClass}
                               />
                               <p className="mt-1.5 text-[11px] leading-4 text-ink2">
-                                每天按药箱时区 {timezone} 的此时间检查并发送提醒。
+                                每天按库存时区 {timezone} 的此时间检查并发送提醒。
                               </p>
                             </div>
                           )}
@@ -1250,7 +1250,7 @@ export function SettingsModal({
                                 buttonClassName={inputClass}
                               />
                               <p className="mt-1.5 text-[11px] leading-4 text-ink2">
-                                每天按药箱时区 {timezone} 的此时间检查并发送提醒。
+                                每天按库存时区 {timezone} 的此时间检查并发送提醒。
                               </p>
                             </div>
                           )}
@@ -1363,7 +1363,7 @@ export function SettingsModal({
                                 buttonClassName={inputClass}
                               />
                               <p className="mt-1.5 text-[11px] leading-4 text-ink2">
-                                每天按药箱时区 {timezone} 的此时间检查并发送提醒。
+                                每天按库存时区 {timezone} 的此时间检查并发送提醒。
                               </p>
                             </div>
                           )}
@@ -1490,7 +1490,7 @@ export function SettingsModal({
                                 buttonClassName={inputClass}
                               />
                               <p className="mt-1.5 text-[11px] leading-4 text-ink2">
-                                每天按药箱时区 {timezone} 的此时间检查并发送提醒。
+                                每天按库存时区 {timezone} 的此时间检查并发送提醒。
                               </p>
                             </div>
                           )}
@@ -1746,7 +1746,7 @@ export function SettingsModal({
                       className="bg-status-ok-bg/60 px-3 py-2.5 leading-[1.6]"
                     >
                       <p>
-                        使用 AI 解析时会发送你输入的文本或图片；使用 AI 问答时会发送当前问题和整份药箱数据到已配置的模型接口。
+                        使用 AI 解析时会发送你输入的文本或图片；使用 AI 问答时会发送当前问题和整份库存数据到已配置的模型接口。
                       </p>
                     </DismissibleNotice>
 
@@ -1799,11 +1799,11 @@ export function SettingsModal({
                 <ul className="space-y-3 text-[13px] leading-[1.7] text-ink2">
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-ok/60" />
-                    药箱数据默认保存在当前部署环境的 SQLite 中；未启用 AI 和通知时不会主动发送到外部服务。
+                    库存数据默认保存在当前部署环境的 SQLite 中；未启用 AI 和通知时不会主动发送到外部服务。
                   </li>
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-ok/60" />
-                    使用 AI 解析、拍照识别或问答时，输入文本、图片，以及 AI 问答所需的当前药箱数据会发送到你配置的模型接口。
+                    使用 AI 解析、拍照识别或问答时，输入文本、图片，以及 AI 问答所需的当前库存数据会发送到你配置的模型接口。
                   </li>
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-ok/60" />
@@ -1811,7 +1811,7 @@ export function SettingsModal({
                   </li>
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-ok/60" />
-                    启用通知提醒（Telegram / Discord / 飞书）后，提醒消息中的药品名称、到期日期和状态会发送到对应平台的 API 和你绑定的会话或频道。
+                    启用通知提醒（Telegram / Discord / 飞书）后，提醒消息中的产品名称、到期日期和状态会发送到对应平台的 API 和你绑定的会话或频道。
                   </li>
                 </ul>
               </div>
@@ -1821,23 +1821,23 @@ export function SettingsModal({
                 <ul className="space-y-3 text-[13px] leading-[1.7] text-ink2">
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-warn/60" />
-                    本应用和 AI 输出仅用于库存整理、有效期追踪和基于已录入信息的检索，不提供医疗服务，也不构成诊断、处方或个体化用药建议。
+                    本应用和 AI 输出仅用于农药/农资库存整理、有效期追踪和基于已录入信息的检索，不提供农药登记核验、施药处方或个体化农事建议。
                   </li>
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-warn/60" />
-                    系统不会自动保证识别结果、药品功效匹配、剂量、相互作用、禁忌症、适应证或过敏风险的完整与准确，用药前请务必核对药盒和说明书。
+                    系统不会自动保证识别结果、产品类别、登记作物、防治对象、剂量、混配、禁忌或安全间隔期的完整与准确，使用前请务必核对产品标签和登记信息。
                   </li>
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-warn/60" />
-                    儿童、孕妇、老人、慢性病患者、多药并用者，或症状较重、持续不缓解者，不应仅依赖本应用或 AI 自行决策，请咨询医生或药师。
+                    涉及施药剂量、混配、作物安全、人员防护、环境风险或禁限用要求时，不应仅依赖本应用或 AI 决策，请咨询农技人员并遵循标签。
                   </li>
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-warn/60" />
-                    出现高热不退、剧烈疼痛、呼吸困难、胸痛、抽搐、明显过敏反应等情况，请立即就医或寻求急救帮助。
+                    发现破损泄漏、标签不清、疑似禁限用或过期产品时，请优先隔离存放，按当地要求处理。
                   </li>
                   <li className="flex gap-2.5">
                     <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-status-warn/60" />
-                    因录入错误、模型偏差、提醒延迟、第三方服务处理或自行用药产生的风险与后果，由使用者自行判断并承担。
+                    因录入错误、模型偏差、提醒延迟、第三方服务处理或自行施用产生的风险与后果，由使用者自行判断并承担。
                   </li>
                 </ul>
               </div>
@@ -2076,7 +2076,7 @@ export function SettingsModal({
                     })}
                   </div>
                   <p className="text-[11px] leading-4 text-ink2">
-                    有效期在此天数内的药品会被标记为“即将过期”。
+                    有效期在此天数内的产品会被标记为“即将过期”。
                   </p>
                 </div>
 

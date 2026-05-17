@@ -175,7 +175,33 @@ describe('POST /api/ai/query', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.answer).toContain('药箱概况');
+    expect(body.data.answer).toContain('库存概况');
+  });
+
+  it('updates stock directly for inventory decrease commands', async () => {
+    testDb
+      .prepare(
+        `INSERT INTO medicines (name, spec, quantity, category) VALUES (?, ?, ?, ?)`,
+      )
+      .run('甲氨基阿维菌素苯甲酸盐', '1%，200g/瓶', '15瓶', '杀虫剂');
+
+    const app = createApp();
+    const res = await app.request('/api/ai/query', {
+      method: 'POST',
+      headers: AI_HEADERS,
+      body: JSON.stringify({ question: '甲氨基阿维菌素苯甲酸盐 库存减掉一。' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.answer).toContain('已更新库存');
+    expect(body.data.inventoryChanged).toBe(true);
+    expect(body.data.medicines[0].quantity).toBe('14瓶');
+
+    const row = testDb
+      .prepare('SELECT quantity FROM medicines WHERE name = ?')
+      .get('甲氨基阿维菌素苯甲酸盐') as { quantity: string };
+    expect(row.quantity).toBe('14瓶');
   });
 
   it('calls AI for non-inventory questions with medicines in DB', async () => {

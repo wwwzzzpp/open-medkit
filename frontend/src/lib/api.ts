@@ -539,7 +539,9 @@ export async function queryMedicines(
   settings: Settings,
   signal?: AbortSignal,
 ) {
-  const payload = await request<{ data: { answer: string; medicines: Medicine[] } }>('/ai/query', {
+  const payload = await request<{
+    data: { answer: string; medicines: Medicine[]; inventoryChanged?: boolean };
+  }>('/ai/query', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -561,7 +563,7 @@ export async function queryMedicinesStream(
   settings: Settings,
   onEvent: (event: AiQueryStreamEvent) => void,
   signal?: AbortSignal,
-): Promise<{ answer: string; medicines: Medicine[] }> {
+): Promise<{ answer: string; medicines: Medicine[]; inventoryChanged?: boolean }> {
   const url = `${API_BASE}/ai/query-stream`;
   const response = await fetch(url, {
     method: 'POST',
@@ -596,7 +598,7 @@ export async function queryMedicinesStream(
   const decoder = new TextDecoder();
   let buffer = '';
 
-  return new Promise<{ answer: string; medicines: Medicine[] }>((resolve, reject) => {
+  return new Promise<{ answer: string; medicines: Medicine[]; inventoryChanged?: boolean }>((resolve, reject) => {
     const read = async () => {
       try {
         for (;;) {
@@ -624,6 +626,7 @@ export async function queryMedicinesStream(
                 resolve({
                   answer: event.answer,
                   medicines: event.medicines,
+                  inventoryChanged: event.inventoryChanged,
                 });
                 return;
               } else if (event.type === 'error') {
