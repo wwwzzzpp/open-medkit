@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { History, X } from 'lucide-react';
+import { History, Layers3, Plus, Trash2, X } from 'lucide-react';
 
-import { getInventoryTransactions } from '../lib/api';
+import {
+  createInventoryBatch,
+  deleteInventoryBatch,
+  getInventoryBatches,
+  getInventoryTransactions,
+} from '../lib/api';
 import { useTimezone } from '../hooks/useTimezone';
 import {
   daysUntilExpiry,
@@ -10,7 +15,13 @@ import {
   getMedicineStatus,
   getStatusText,
 } from '../lib/utils';
-import type { InventoryActionType, InventoryTransaction, InventoryTransactionSource, Medicine } from '../types';
+import type {
+  InventoryActionType,
+  InventoryBatch,
+  InventoryTransaction,
+  InventoryTransactionSource,
+  Medicine,
+} from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface MedicineDetailModalProps {
@@ -178,6 +189,195 @@ function InventoryTransactionList({
   );
 }
 
+const emptyBatchForm = {
+  batch_no: '',
+  expires_at: '',
+  quantity: '',
+  supplier: '',
+  location: '',
+  notes: '',
+};
+
+function parseQuantityForSummary(value?: string) {
+  const match = (value || '').trim().match(/^([0-9]+(?:\.[0-9]+)?)\s*(.*)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number(match[1]);
+
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+
+  return {
+    amount,
+    unit: match[2].trim(),
+  };
+}
+
+function buildBatchSummary(batches: InventoryBatch[]) {
+  let unit = '';
+  let total = 0;
+
+  for (const batch of batches) {
+    const parsed = parseQuantityForSummary(batch.quantity);
+
+    if (!parsed) {
+      continue;
+    }
+
+    if (!unit) {
+      unit = parsed.unit;
+    }
+
+    if (unit !== parsed.unit) {
+      return `${batches.length} 个批次`;
+    }
+
+    total += parsed.amount;
+  }
+
+  if (total > 0) {
+    return `合计 ${Number(total.toFixed(3))}${unit}`;
+  }
+
+  return `${batches.length} 个批次`;
+}
+
+function BatchManagementSection({
+  batches,
+  loading,
+  form,
+  saving,
+  error,
+  onFormChange,
+  onAddBatch,
+  onDeleteBatch,
+}: {
+  batches: InventoryBatch[];
+  loading: boolean;
+  form: typeof emptyBatchForm;
+  saving: boolean;
+  error: string;
+  onFormChange: (key: keyof typeof emptyBatchForm, value: string) => void;
+  onAddBatch: () => void;
+  onDeleteBatch: (batch: InventoryBatch) => void;
+}) {
+  return (
+    <section className="theme-panel-soft rounded-[16px] border px-4 py-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[12px] font-medium uppercase tracking-[0.08em] text-ink3">
+          <Layers3 className="h-4 w-4" strokeWidth={1.9} />
+          <span>批次库存</span>
+        </div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink3">
+          {batches.length > 0 ? buildBatchSummary(batches) : '暂无批次'}
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2.5">
+        {loading ? (
+          <div className="rounded-[12px] border border-border/50 bg-surface px-3 py-3 text-[13px] text-ink2">
+            正在加载批次...
+          </div>
+        ) : batches.length === 0 ? (
+          <div className="rounded-[12px] border border-border/50 bg-surface px-3 py-3 text-[13px] text-ink2">
+            还没有批次记录。可以先补一条采购批次，后续出库会更容易追踪。
+          </div>
+        ) : (
+          batches.map((batch) => (
+            <div
+              key={batch.id}
+              className="rounded-[12px] border border-border/50 bg-surface px-3 py-2.5"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium text-ink">
+                    {batch.batch_no || `批次 #${batch.id}`}
+                  </div>
+                  <div className="mt-1 text-[11px] leading-5 text-ink3">
+                    {[batch.quantity, batch.expires_at ? `有效期 ${formatDate(batch.expires_at)}` : '', batch.location, batch.supplier]
+                      .filter(Boolean)
+                      .join(' · ') || '暂无附加信息'}
+                  </div>
+                  {batch.notes && (
+                    <div className="mt-1 text-[11px] leading-5 text-ink2">{batch.notes}</div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onDeleteBatch(batch)}
+                  aria-label={`删除批次 ${batch.batch_no || batch.id}`}
+                  className="theme-icon-button rounded-full border p-2 transition-all duration-200 hover:text-status-danger"
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="mt-3 rounded-[12px] border border-border/50 bg-surface px-3 py-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <input
+            value={form.batch_no}
+            onChange={(event) => onFormChange('batch_no', event.target.value)}
+            placeholder="批号 / 批次名"
+            className="rounded-[10px] border border-border bg-surface2 px-3 py-2 text-[12px] text-ink outline-none focus:border-accent/60"
+          />
+          <input
+            value={form.quantity}
+            onChange={(event) => onFormChange('quantity', event.target.value)}
+            placeholder="数量，如 10瓶"
+            className="rounded-[10px] border border-border bg-surface2 px-3 py-2 text-[12px] text-ink outline-none focus:border-accent/60"
+          />
+          <input
+            value={form.expires_at}
+            onChange={(event) => onFormChange('expires_at', event.target.value)}
+            placeholder="有效期 YYYY-MM-DD"
+            className="rounded-[10px] border border-border bg-surface2 px-3 py-2 text-[12px] text-ink outline-none focus:border-accent/60"
+          />
+          <input
+            value={form.location}
+            onChange={(event) => onFormChange('location', event.target.value)}
+            placeholder="位置"
+            className="rounded-[10px] border border-border bg-surface2 px-3 py-2 text-[12px] text-ink outline-none focus:border-accent/60"
+          />
+          <input
+            value={form.supplier}
+            onChange={(event) => onFormChange('supplier', event.target.value)}
+            placeholder="供应商"
+            className="rounded-[10px] border border-border bg-surface2 px-3 py-2 text-[12px] text-ink outline-none focus:border-accent/60"
+          />
+          <input
+            value={form.notes}
+            onChange={(event) => onFormChange('notes', event.target.value)}
+            placeholder="备注"
+            className="rounded-[10px] border border-border bg-surface2 px-3 py-2 text-[12px] text-ink outline-none focus:border-accent/60"
+          />
+        </div>
+
+        {error && <div className="mt-2 text-[12px] text-status-danger">{error}</div>}
+
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={onAddBatch}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-[12px] font-medium text-white transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
+            {saving ? '保存中...' : '新增批次'}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function MedicineDetailModal({
   medicine,
   expiringDays,
@@ -191,6 +391,11 @@ export function MedicineDetailModal({
   const [error, setError] = useState('');
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [batches, setBatches] = useState<InventoryBatch[]>([]);
+  const [batchesLoading, setBatchesLoading] = useState(false);
+  const [batchForm, setBatchForm] = useState(emptyBatchForm);
+  const [batchSaving, setBatchSaving] = useState(false);
+  const [batchError, setBatchError] = useState('');
 
   useEffect(() => {
     if (!medicine) {
@@ -219,6 +424,9 @@ export function MedicineDetailModal({
     setConfirmOpen(false);
     setError('');
     setTransactions([]);
+    setBatches([]);
+    setBatchForm(emptyBatchForm);
+    setBatchError('');
   }, [medicine?.id]);
 
   useEffect(() => {
@@ -251,6 +459,36 @@ export function MedicineDetailModal({
     };
   }, [medicine]);
 
+  useEffect(() => {
+    if (!medicine) {
+      return;
+    }
+
+    let cancelled = false;
+    setBatchesLoading(true);
+
+    void getInventoryBatches(medicine.id)
+      .then((items) => {
+        if (!cancelled) {
+          setBatches(items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBatches([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBatchesLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [medicine]);
+
   if (!medicine) {
     return null;
   }
@@ -272,6 +510,52 @@ export function MedicineDetailModal({
       setError(err instanceof Error ? err.message : '删除失败');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const refreshDetailLists = async () => {
+    const [nextBatches, nextTransactions] = await Promise.all([
+      getInventoryBatches(medicine.id),
+      getInventoryTransactions(medicine.id),
+    ]);
+    setBatches(nextBatches);
+    setTransactions(nextTransactions);
+  };
+
+  const handleBatchFormChange = (key: keyof typeof emptyBatchForm, value: string) => {
+    setBatchForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleAddBatch = async () => {
+    const hasContent = Object.values(batchForm).some((value) => value.trim().length > 0);
+
+    if (!hasContent) {
+      setBatchError('请至少填写一个批次字段。');
+      return;
+    }
+
+    setBatchSaving(true);
+    setBatchError('');
+
+    try {
+      await createInventoryBatch(medicine.id, batchForm);
+      setBatchForm(emptyBatchForm);
+      await refreshDetailLists();
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : '新增批次失败');
+    } finally {
+      setBatchSaving(false);
+    }
+  };
+
+  const handleDeleteBatch = async (batch: InventoryBatch) => {
+    setBatchError('');
+
+    try {
+      await deleteInventoryBatch(medicine.id, batch.id);
+      await refreshDetailLists();
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : '删除批次失败');
     }
   };
 
@@ -346,6 +630,16 @@ export function MedicineDetailModal({
 
           <Section title="防治对象 / 用途" value={medicine.usage_desc} />
           <Section title="备注" value={medicine.notes} />
+          <BatchManagementSection
+            batches={batches}
+            loading={batchesLoading}
+            form={batchForm}
+            saving={batchSaving}
+            error={batchError}
+            onFormChange={handleBatchFormChange}
+            onAddBatch={handleAddBatch}
+            onDeleteBatch={handleDeleteBatch}
+          />
           <InventoryTransactionList
             transactions={transactions}
             loading={transactionsLoading}

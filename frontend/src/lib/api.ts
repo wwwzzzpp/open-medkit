@@ -2,6 +2,7 @@ import type {
   AppSettings,
   AiQueryStreamEvent,
   BatchParseResult,
+  InventoryBatch,
   InventoryTransaction,
   MedicineFilterStatus,
   Medicine,
@@ -156,6 +157,32 @@ export async function getInventoryTransactions(medicineId: number, limit = 30) {
     `/medicines/${medicineId}/transactions?${search.toString()}`,
   );
   return payload.data;
+}
+
+export async function getInventoryBatches(medicineId: number) {
+  const payload = await request<{ data: InventoryBatch[] }>(`/medicines/${medicineId}/batches`);
+  return payload.data;
+}
+
+export async function createInventoryBatch(
+  medicineId: number,
+  data: Partial<Omit<InventoryBatch, 'id' | 'medicine_id' | 'created_at' | 'updated_at'>>,
+) {
+  const payload = await request<{ data: InventoryBatch }>(`/medicines/${medicineId}/batches`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+
+  return payload.data;
+}
+
+export async function deleteInventoryBatch(medicineId: number, batchId: number) {
+  await request<{ data: { deleted: boolean } }>(`/medicines/${medicineId}/batches/${batchId}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function createMedicine(data: MedicinePayload) {

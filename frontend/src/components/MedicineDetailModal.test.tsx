@@ -2,7 +2,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MedicineDetailModal } from './MedicineDetailModal';
-import { getInventoryTransactions } from '../lib/api';
+import {
+  createInventoryBatch,
+  deleteInventoryBatch,
+  getInventoryBatches,
+  getInventoryTransactions,
+} from '../lib/api';
 
 vi.mock('../hooks/useTimezone', () => ({
   useTimezone: () => ({
@@ -11,6 +16,14 @@ vi.mock('../hooks/useTimezone', () => ({
 }));
 
 vi.mock('../lib/api', () => ({
+  createInventoryBatch: vi.fn().mockResolvedValue({
+    id: 1,
+    medicine_id: 1,
+    created_at: '2026-05-18 10:00:00',
+    updated_at: '2026-05-18 10:00:00',
+  }),
+  deleteInventoryBatch: vi.fn().mockResolvedValue(undefined),
+  getInventoryBatches: vi.fn().mockResolvedValue([]),
   getInventoryTransactions: vi.fn().mockResolvedValue([]),
 }));
 
@@ -31,6 +44,14 @@ const medicine = {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.mocked(createInventoryBatch).mockResolvedValue({
+    id: 1,
+    medicine_id: 1,
+    created_at: '2026-05-18 10:00:00',
+    updated_at: '2026-05-18 10:00:00',
+  });
+  vi.mocked(deleteInventoryBatch).mockResolvedValue(undefined);
+  vi.mocked(getInventoryBatches).mockResolvedValue([]);
   vi.mocked(getInventoryTransactions).mockResolvedValue([]);
 });
 
@@ -117,5 +138,51 @@ describe('MedicineDetailModal', () => {
     expect(await screen.findByText('-1瓶')).toBeInTheDocument();
     expect(screen.getByText('20瓶 → 19瓶')).toBeInTheDocument();
     expect(screen.getByText(/AI · AI 库存扣减/)).toBeInTheDocument();
+  });
+
+  it('adds an inventory batch from detail modal', async () => {
+    vi.mocked(getInventoryBatches)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 1,
+          medicine_id: 1,
+          batch_no: 'A-2026',
+          expires_at: '2027-06-30',
+          quantity: '10瓶',
+          supplier: '',
+          location: 'A架',
+          notes: '',
+          created_at: '2026-05-18 10:00:00',
+          updated_at: '2026-05-18 10:00:00',
+        },
+      ]);
+
+    render(
+      <MedicineDetailModal
+        medicine={medicine}
+        expiringDays={30}
+        onClose={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('批号 / 批次名'), {
+      target: { value: 'A-2026' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('数量，如 10瓶'), {
+      target: { value: '10瓶' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '新增批次' }));
+
+    await waitFor(() =>
+      expect(createInventoryBatch).toHaveBeenCalledWith(
+        medicine.id,
+        expect.objectContaining({ batch_no: 'A-2026', quantity: '10瓶' }),
+      ),
+    );
+    expect(await screen.findByText('A-2026')).toBeInTheDocument();
+    expect(screen.getByText(/合计 10瓶/)).toBeInTheDocument();
   });
 });

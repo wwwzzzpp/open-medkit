@@ -31,6 +31,21 @@ export interface InventoryTransaction {
   created_at: string;
 }
 
+export interface InventoryBatch {
+  id: number;
+  medicine_id: number;
+  batch_no?: string;
+  production_date?: string;
+  expires_at?: string;
+  quantity?: string;
+  purchase_date?: string;
+  supplier?: string;
+  location?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type MedicineStatus = 'expired' | 'expiring' | 'ok' | 'unknown';
 export type MedicineFilterStatus = Exclude<MedicineStatus, 'unknown'>;
 export type HomeTabPreference = 'ai' | 'manual';

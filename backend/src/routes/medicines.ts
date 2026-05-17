@@ -41,6 +41,32 @@ interface MedicineInput {
   notes?: string;
 }
 
+interface InventoryBatchRecord {
+  id: number;
+  medicine_id: number;
+  batch_no: string | null;
+  production_date: string | null;
+  expires_at: string | null;
+  quantity: string | null;
+  purchase_date: string | null;
+  supplier: string | null;
+  location: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface InventoryBatchInput {
+  batch_no?: string;
+  production_date?: string;
+  expires_at?: string;
+  quantity?: string;
+  purchase_date?: string;
+  supplier?: string;
+  location?: string;
+  notes?: string;
+}
+
 function normalizeExpiringDays(value?: string) {
   const numeric = Number(value);
 
@@ -92,6 +118,39 @@ function rowToMedicine(row: MedicineRecord) {
     location: row.location || '',
     notes: row.notes || '',
   };
+}
+
+function normalizeBatchInput(input: Partial<InventoryBatchInput>) {
+  return {
+    batch_no: input.batch_no?.trim() || '',
+    production_date: input.production_date?.trim() || '',
+    expires_at: input.expires_at?.trim() || '',
+    quantity: input.quantity?.trim() || '',
+    purchase_date: input.purchase_date?.trim() || '',
+    supplier: input.supplier?.trim() || '',
+    location: input.location?.trim() || '',
+    notes: input.notes?.trim() || '',
+  };
+}
+
+function rowToBatch(row: InventoryBatchRecord) {
+  return {
+    ...row,
+    batch_no: row.batch_no || '',
+    production_date: row.production_date || '',
+    expires_at: row.expires_at || '',
+    quantity: row.quantity || '',
+    purchase_date: row.purchase_date || '',
+    supplier: row.supplier || '',
+    location: row.location || '',
+    notes: row.notes || '',
+  };
+}
+
+function getExistingMedicine(db: ReturnType<typeof getDb>, id: number) {
+  return db
+    .prepare('SELECT * FROM medicines WHERE id = ?')
+    .get(id) as MedicineRecord | undefined;
 }
 
 export const medicinesRouter = new Hono();
@@ -363,6 +422,219 @@ medicinesRouter.get('/:id/transactions', (c) => {
     return c.json(
       {
         error: 'Failed to fetch inventory transactions',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500,
+    );
+  }
+});
+
+medicinesRouter.get('/:id/batches', (c) => {
+  try {
+    const db = getDb();
+    const id = Number(c.req.param('id'));
+    const existing = getExistingMedicine(db, id);
+
+    if (!existing) {
+      return c.json({ error: 'Medicine not found' }, 404);
+    }
+
+    const rows = db
+      .prepare(
+        `
+          SELECT *
+          FROM inventory_batches
+          WHERE medicine_id = ?
+          ORDER BY expires_at IS NULL ASC, expires_at ASC, id ASC
+        `,
+      )
+      .all(id) as InventoryBatchRecord[];
+
+    return c.json({ data: rows.map(rowToBatch) });
+  } catch (error) {
+    return c.json(
+      {
+        error: 'Failed to fetch inventory batches',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500,
+    );
+  }
+});
+
+medicinesRouter.post('/:id/batches', async (c) => {
+  try {
+    const db = getDb();
+    const id = Number(c.req.param('id'));
+    const medicine = getExistingMedicine(db, id);
+
+    if (!medicine) {
+      return c.json({ error: 'Medicine not found' }, 404);
+    }
+
+    const payload = normalizeBatchInput((await c.req.json()) as Partial<InventoryBatchInput>);
+    const hasContent = Object.values(payload).some((value) => value.length > 0);
+
+    if (!hasContent) {
+      return c.json({ error: 'Batch information is required' }, 400);
+    }
+
+    const result = db
+      .prepare(
+        `
+          INSERT INTO inventory_batches
+          (medicine_id, batch_no, production_date, expires_at, quantity, purchase_date, supplier, location, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        id,
+        payload.batch_no || null,
+        payload.production_date || null,
+        payload.expires_at || null,
+        payload.quantity || null,
+        payload.purchase_date || null,
+        payload.supplier || null,
+        payload.location || null,
+        payload.notes || null,
+      );
+
+    if (payload.quantity) {
+      recordInventoryTransaction(db, {
+        medicineId: id,
+        medicineName: medicine.name,
+        actionType: 'stock_in',
+        quantityBefore: '',
+        quantityAfter: payload.quantity,
+        quantityDelta: `+${payload.quantity}`,
+        source: 'manual',
+        reason: payload.batch_no ? `新增批次 ${payload.batch_no}` : '新增批次',
+      });
+    }
+
+    const batch = db
+      .prepare('SELECT * FROM inventory_batches WHERE id = ?')
+      .get(result.lastInsertRowid) as InventoryBatchRecord;
+
+    return c.json({ data: rowToBatch(batch) }, 201);
+  } catch (error) {
+    return c.json(
+      {
+        error: 'Failed to create inventory batch',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500,
+    );
+  }
+});
+
+medicinesRouter.put('/:id/batches/:batchId', async (c) => {
+  try {
+    const db = getDb();
+    const id = Number(c.req.param('id'));
+    const batchId = Number(c.req.param('batchId'));
+    const medicine = getExistingMedicine(db, id);
+
+    if (!medicine) {
+      return c.json({ error: 'Medicine not found' }, 404);
+    }
+
+    const existing = db
+      .prepare('SELECT * FROM inventory_batches WHERE id = ? AND medicine_id = ?')
+      .get(batchId, id) as InventoryBatchRecord | undefined;
+
+    if (!existing) {
+      return c.json({ error: 'Batch not found' }, 404);
+    }
+
+    const payload = normalizeBatchInput((await c.req.json()) as Partial<InventoryBatchInput>);
+
+    db.prepare(
+      `
+        UPDATE inventory_batches
+        SET batch_no = ?, production_date = ?, expires_at = ?, quantity = ?, purchase_date = ?, supplier = ?, location = ?, notes = ?
+        WHERE id = ? AND medicine_id = ?
+      `,
+    ).run(
+      payload.batch_no || null,
+      payload.production_date || null,
+      payload.expires_at || null,
+      payload.quantity || null,
+      payload.purchase_date || null,
+      payload.supplier || null,
+      payload.location || null,
+      payload.notes || null,
+      batchId,
+      id,
+    );
+
+    if ((existing.quantity || '') !== payload.quantity) {
+      recordInventoryTransaction(db, {
+        medicineId: id,
+        medicineName: medicine.name,
+        actionType: 'adjustment',
+        quantityBefore: existing.quantity || '',
+        quantityAfter: payload.quantity,
+        source: 'manual',
+        reason: payload.batch_no ? `编辑批次 ${payload.batch_no}` : '编辑批次',
+      });
+    }
+
+    const batch = db
+      .prepare('SELECT * FROM inventory_batches WHERE id = ?')
+      .get(batchId) as InventoryBatchRecord;
+
+    return c.json({ data: rowToBatch(batch) });
+  } catch (error) {
+    return c.json(
+      {
+        error: 'Failed to update inventory batch',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500,
+    );
+  }
+});
+
+medicinesRouter.delete('/:id/batches/:batchId', (c) => {
+  try {
+    const db = getDb();
+    const id = Number(c.req.param('id'));
+    const batchId = Number(c.req.param('batchId'));
+    const medicine = getExistingMedicine(db, id);
+
+    if (!medicine) {
+      return c.json({ error: 'Medicine not found' }, 404);
+    }
+
+    const existing = db
+      .prepare('SELECT * FROM inventory_batches WHERE id = ? AND medicine_id = ?')
+      .get(batchId, id) as InventoryBatchRecord | undefined;
+
+    if (!existing) {
+      return c.json({ error: 'Batch not found' }, 404);
+    }
+
+    if (existing.quantity) {
+      recordInventoryTransaction(db, {
+        medicineId: id,
+        medicineName: medicine.name,
+        actionType: 'adjustment',
+        quantityBefore: existing.quantity,
+        quantityAfter: '',
+        quantityDelta: `-${existing.quantity}`,
+        source: 'manual',
+        reason: existing.batch_no ? `删除批次 ${existing.batch_no}` : '删除批次',
+      });
+    }
+
+    db.prepare('DELETE FROM inventory_batches WHERE id = ? AND medicine_id = ?').run(batchId, id);
+
+    return c.json({ data: { deleted: true } });
+  } catch (error) {
+    return c.json(
+      {
+        error: 'Failed to delete inventory batch',
         detail: error instanceof Error ? error.message : 'Unknown error',
       },
       500,

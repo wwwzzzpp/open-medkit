@@ -325,6 +325,64 @@ describe('GET /api/medicines/:id/transactions', () => {
   });
 });
 
+describe('Inventory batches', () => {
+  it('creates and lists batches for a product', async () => {
+    insertMedicine({ name: '噻呋酰胺', quantity: '10瓶' });
+    const app = createApp();
+
+    const createRes = await app.request('/api/medicines/1/batches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        batch_no: 'A-2026',
+        expires_at: '2027-06-30',
+        quantity: '5瓶',
+        location: 'A架',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+
+    const listRes = await app.request('/api/medicines/1/batches');
+    const body = await listRes.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].batch_no).toBe('A-2026');
+    expect(body.data[0].quantity).toBe('5瓶');
+
+    const transaction = testDb
+      .prepare('SELECT * FROM inventory_transactions WHERE medicine_id = ?')
+      .get(1) as { action_type: string; quantity_delta: string; reason: string };
+    expect(transaction.action_type).toBe('stock_in');
+    expect(transaction.quantity_delta).toBe('+5瓶');
+    expect(transaction.reason).toContain('A-2026');
+  });
+
+  it('updates and deletes batches', async () => {
+    insertMedicine({ name: '噻呋酰胺', quantity: '10瓶' });
+    testDb
+      .prepare(
+        `INSERT INTO inventory_batches (medicine_id, batch_no, quantity, expires_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(1, 'A-2026', '5瓶', '2027-06-30');
+
+    const app = createApp();
+    const updateRes = await app.request('/api/medicines/1/batches/1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch_no: 'A-2026', quantity: '4瓶' }),
+    });
+    expect(updateRes.status).toBe(200);
+    const updateBody = await updateRes.json();
+    expect(updateBody.data.quantity).toBe('4瓶');
+
+    const deleteRes = await app.request('/api/medicines/1/batches/1', { method: 'DELETE' });
+    expect(deleteRes.status).toBe(200);
+
+    const rows = testDb.prepare('SELECT * FROM inventory_batches').all();
+    expect(rows).toHaveLength(0);
+  });
+});
+
 describe('DELETE /api/medicines/:id', () => {
   it('returns 404 for non-existent ID', async () => {
     const app = createApp();
