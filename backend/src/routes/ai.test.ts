@@ -202,6 +202,13 @@ describe('POST /api/ai/query', () => {
       .prepare('SELECT quantity FROM medicines WHERE name = ?')
       .get('甲氨基阿维菌素苯甲酸盐') as { quantity: string };
     expect(row.quantity).toBe('14瓶');
+
+    const transaction = testDb
+      .prepare('SELECT * FROM inventory_transactions WHERE medicine_id = ?')
+      .get(1) as { action_type: string; quantity_delta: string; source: string };
+    expect(transaction.action_type).toBe('stock_out');
+    expect(transaction.quantity_delta).toBe('-1瓶');
+    expect(transaction.source).toBe('ai');
   });
 
   it('calls AI for non-inventory questions with medicines in DB', async () => {

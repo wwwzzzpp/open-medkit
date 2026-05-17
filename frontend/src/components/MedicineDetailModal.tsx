@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { History, X } from 'lucide-react';
 
+import { getInventoryTransactions } from '../lib/api';
 import { useTimezone } from '../hooks/useTimezone';
 import {
   daysUntilExpiry,
@@ -9,7 +10,7 @@ import {
   getMedicineStatus,
   getStatusText,
 } from '../lib/utils';
-import type { Medicine } from '../types';
+import type { InventoryActionType, InventoryTransaction, InventoryTransactionSource, Medicine } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface MedicineDetailModalProps {
@@ -84,6 +85,99 @@ function Section({
   );
 }
 
+function getTransactionTypeText(type: InventoryActionType) {
+  const map: Record<InventoryActionType, string> = {
+    create: '新增',
+    stock_in: '入库',
+    stock_out: '出库',
+    adjustment: '调整',
+    delete: '删除',
+  };
+
+  return map[type] || type;
+}
+
+function getTransactionSourceText(source: InventoryTransactionSource) {
+  const map: Record<InventoryTransactionSource, string> = {
+    manual: '手动',
+    ai: 'AI',
+    import: '导入',
+  };
+
+  return map[source] || source;
+}
+
+function formatTransactionTime(value: string) {
+  return value.replace('T', ' ').slice(0, 16);
+}
+
+function InventoryTransactionList({
+  transactions,
+  loading,
+}: {
+  transactions: InventoryTransaction[];
+  loading: boolean;
+}) {
+  return (
+    <section className="theme-panel-soft rounded-[16px] border px-4 py-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[12px] font-medium uppercase tracking-[0.08em] text-ink3">
+          <History className="h-4 w-4" strokeWidth={1.9} />
+          <span>库存流水</span>
+        </div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink3">
+          最近 {transactions.length} 条
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2.5">
+        {loading ? (
+          <div className="rounded-[12px] border border-border/50 bg-surface px-3 py-3 text-[13px] text-ink2">
+            正在加载库存流水...
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="rounded-[12px] border border-border/50 bg-surface px-3 py-3 text-[13px] text-ink2">
+            暂无库存流水。
+          </div>
+        ) : (
+          transactions.map((transaction) => (
+            <div
+              key={transaction.id}
+              className="rounded-[12px] border border-border/50 bg-surface px-3 py-2.5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-surface2 px-2.5 py-1 text-[11px] font-medium text-ink2">
+                    {getTransactionTypeText(transaction.action_type)}
+                  </span>
+                  {transaction.quantity_delta && (
+                    <span className="font-mono text-[12px] font-semibold text-accent">
+                      {transaction.quantity_delta}
+                    </span>
+                  )}
+                </div>
+                <span className="font-mono text-[10px] text-ink3">
+                  {formatTransactionTime(transaction.created_at)}
+                </span>
+              </div>
+
+              <div className="mt-2 text-[13px] text-ink">
+                {(transaction.quantity_before || '未填写')} → {(transaction.quantity_after || '未填写')}
+              </div>
+
+              <div className="mt-1 text-[11px] leading-5 text-ink3">
+                {getTransactionSourceText(transaction.source)}
+                {transaction.reason ? ` · ${transaction.reason}` : ''}
+                {transaction.note ? ` · ${transaction.note}` : ''}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function MedicineDetailModal({
   medicine,
   expiringDays,
@@ -95,6 +189,8 @@ export function MedicineDetailModal({
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState('');
+  const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
 
   useEffect(() => {
     if (!medicine) {
@@ -122,7 +218,38 @@ export function MedicineDetailModal({
     setDeleting(false);
     setConfirmOpen(false);
     setError('');
+    setTransactions([]);
   }, [medicine?.id]);
+
+  useEffect(() => {
+    if (!medicine) {
+      return;
+    }
+
+    let cancelled = false;
+    setTransactionsLoading(true);
+
+    void getInventoryTransactions(medicine.id)
+      .then((items) => {
+        if (!cancelled) {
+          setTransactions(items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTransactions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setTransactionsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [medicine]);
 
   if (!medicine) {
     return null;
@@ -219,6 +346,10 @@ export function MedicineDetailModal({
 
           <Section title="防治对象 / 用途" value={medicine.usage_desc} />
           <Section title="备注" value={medicine.notes} />
+          <InventoryTransactionList
+            transactions={transactions}
+            loading={transactionsLoading}
+          />
         </div>
 
         <div className="border-t border-border/40 bg-surface/70 px-5 py-3.5">

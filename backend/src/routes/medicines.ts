@@ -7,6 +7,10 @@ import {
   getDateBoundaries,
   getStoredTimezone,
 } from '../utils/timezone';
+import {
+  listInventoryTransactions,
+  recordInventoryTransaction,
+} from '../services/inventory-transactions';
 
 interface MedicineRecord {
   id: number;
@@ -259,7 +263,7 @@ medicinesRouter.post('/import', async (c) => {
         }
 
         try {
-          insert.run(
+          const result = insert.run(
             normalized.name,
             normalized.brand || null,
             normalized.name_en || null,
@@ -271,6 +275,16 @@ medicinesRouter.post('/import', async (c) => {
             normalized.location || null,
             normalized.notes || null
           );
+          recordInventoryTransaction(db, {
+            medicineId: Number(result.lastInsertRowid),
+            medicineName: normalized.name,
+            actionType: 'create',
+            quantityBefore: '',
+            quantityAfter: normalized.quantity,
+            quantityDelta: normalized.quantity ? `+${normalized.quantity}` : '',
+            source: 'import',
+            reason: '导入新增库存',
+          });
           imported += 1;
         } catch (error) {
           skipped += 1;
@@ -327,6 +341,31 @@ medicinesRouter.get('/categories', (c) => {
         detail: error instanceof Error ? error.message : 'Unknown error',
       },
       500
+    );
+  }
+});
+
+medicinesRouter.get('/:id/transactions', (c) => {
+  try {
+    const db = getDb();
+    const id = Number(c.req.param('id'));
+    const limit = Number(c.req.query('limit') || 30);
+    const existing = db
+      .prepare('SELECT id FROM medicines WHERE id = ?')
+      .get(id) as { id: number } | undefined;
+
+    if (!existing) {
+      return c.json({ error: 'Medicine not found' }, 404);
+    }
+
+    return c.json({ data: listInventoryTransactions(db, id, limit) });
+  } catch (error) {
+    return c.json(
+      {
+        error: 'Failed to fetch inventory transactions',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500,
     );
   }
 });
@@ -390,6 +429,17 @@ medicinesRouter.post('/', async (c) => {
       .prepare('SELECT * FROM medicines WHERE id = ?')
       .get(result.lastInsertRowid) as MedicineRecord;
 
+    recordInventoryTransaction(db, {
+      medicineId: medicine.id,
+      medicineName: medicine.name,
+      actionType: 'create',
+      quantityBefore: '',
+      quantityAfter: payload.quantity,
+      quantityDelta: payload.quantity ? `+${payload.quantity}` : '',
+      source: 'manual',
+      reason: '新增库存',
+    });
+
     return c.json({ data: rowToMedicine(medicine) }, 201);
   } catch (error) {
     return c.json(
@@ -407,8 +457,8 @@ medicinesRouter.put('/:id', async (c) => {
     const db = getDb();
     const id = Number(c.req.param('id'));
     const existing = db
-      .prepare('SELECT id FROM medicines WHERE id = ?')
-      .get(id) as { id: number } | undefined;
+      .prepare('SELECT * FROM medicines WHERE id = ?')
+      .get(id) as MedicineRecord | undefined;
 
     if (!existing) {
       return c.json({ error: 'Medicine not found' }, 404);
@@ -444,6 +494,18 @@ medicinesRouter.put('/:id', async (c) => {
       .prepare('SELECT * FROM medicines WHERE id = ?')
       .get(id) as MedicineRecord;
 
+    if ((existing.quantity || '') !== (payload.quantity || '')) {
+      recordInventoryTransaction(db, {
+        medicineId: id,
+        medicineName: medicine.name,
+        actionType: 'adjustment',
+        quantityBefore: existing.quantity || '',
+        quantityAfter: payload.quantity,
+        source: 'manual',
+        reason: '手动编辑库存数量',
+      });
+    }
+
     return c.json({ data: rowToMedicine(medicine) });
   } catch (error) {
     return c.json(
@@ -460,6 +522,25 @@ medicinesRouter.delete('/:id', (c) => {
   try {
     const db = getDb();
     const id = Number(c.req.param('id'));
+    const existing = db
+      .prepare('SELECT * FROM medicines WHERE id = ?')
+      .get(id) as MedicineRecord | undefined;
+
+    if (!existing) {
+      return c.json({ error: 'Medicine not found' }, 404);
+    }
+
+    recordInventoryTransaction(db, {
+      medicineId: id,
+      medicineName: existing.name,
+      actionType: 'delete',
+      quantityBefore: existing.quantity || '',
+      quantityAfter: '',
+      quantityDelta: existing.quantity ? `-${existing.quantity}` : '',
+      source: 'manual',
+      reason: '删除产品',
+    });
+
     const result = db.prepare('DELETE FROM medicines WHERE id = ?').run(id);
 
     if (result.changes === 0) {

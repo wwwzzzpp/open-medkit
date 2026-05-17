@@ -39,6 +39,7 @@ import {
 import { createSseProxyResponse } from '../ai/stream';
 import type { ChatMessage } from '../ai/types';
 import { getDb } from '../db/client';
+import { recordInventoryTransaction } from '../services/inventory-transactions';
 
 export const aiRouter = new Hono<AiEnv>();
 
@@ -104,6 +105,18 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
     .get(intent.medicine.id) as MedicineRecord;
   const updatedMedicine = rowToMedicine(updatedRow);
   const spec = updatedMedicine.spec ? `（${updatedMedicine.spec}）` : '';
+
+  recordInventoryTransaction(db, {
+    medicineId: updatedMedicine.id,
+    medicineName: formatMedicineName(updatedMedicine),
+    actionType: 'stock_out',
+    quantityBefore: formatStockQuantity(current.amount, unit),
+    quantityAfter: nextQuantity,
+    quantityDelta: formatStockQuantity(-intent.amount, unit),
+    source: 'ai',
+    reason: 'AI 库存扣减',
+    note: question,
+  });
 
   return {
     answer: `好的，已更新库存。\n\n**${formatMedicineName(updatedMedicine)}**${spec}：原来 ${formatStockQuantity(current.amount, unit)}，现在 ${nextQuantity}。`,

@@ -23,6 +23,24 @@ BEGIN
   UPDATE medicines SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
 
+CREATE TABLE IF NOT EXISTS inventory_transactions (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  medicine_id     INTEGER,
+  medicine_name   TEXT NOT NULL,
+  action_type     TEXT NOT NULL,
+  quantity_before TEXT,
+  quantity_after  TEXT,
+  quantity_delta  TEXT,
+  source          TEXT NOT NULL DEFAULT 'manual',
+  reason          TEXT,
+  note            TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (medicine_id) REFERENCES medicines(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS inventory_transactions_medicine_id_created_at
+ON inventory_transactions (medicine_id, created_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS notification_channels (
   channel_type       TEXT PRIMARY KEY,
   enabled            INTEGER NOT NULL DEFAULT 0,

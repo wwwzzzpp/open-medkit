@@ -2,6 +2,7 @@ import type {
   AppSettings,
   AiQueryStreamEvent,
   BatchParseResult,
+  InventoryTransaction,
   MedicineFilterStatus,
   Medicine,
   NotificationChannel,
@@ -145,6 +146,15 @@ export async function getCategories() {
 
 export async function getMedicine(id: number) {
   const payload = await request<{ data: Medicine }>(`/medicines/${id}`);
+  return payload.data;
+}
+
+export async function getInventoryTransactions(medicineId: number, limit = 30) {
+  const search = new URLSearchParams();
+  search.set('limit', String(limit));
+  const payload = await request<{ data: InventoryTransaction[] }>(
+    `/medicines/${medicineId}/transactions?${search.toString()}`,
+  );
   return payload.data;
 }
 

@@ -14,6 +14,23 @@ export interface Medicine {
   updated_at: string;
 }
 
+export type InventoryActionType = 'create' | 'stock_in' | 'stock_out' | 'adjustment' | 'delete';
+export type InventoryTransactionSource = 'manual' | 'ai' | 'import';
+
+export interface InventoryTransaction {
+  id: number;
+  medicine_id: number | null;
+  medicine_name: string;
+  action_type: InventoryActionType;
+  quantity_before?: string | null;
+  quantity_after?: string | null;
+  quantity_delta?: string | null;
+  source: InventoryTransactionSource;
+  reason?: string | null;
+  note?: string | null;
+  created_at: string;
+}
+
 export type MedicineStatus = 'expired' | 'expiring' | 'ok' | 'unknown';
 export type MedicineFilterStatus = Exclude<MedicineStatus, 'unknown'>;
 export type HomeTabPreference = 'ai' | 'manual';

@@ -174,6 +174,23 @@ describe('POST /api/medicines', () => {
     expect(body.data.id).toBeDefined();
   });
 
+  it('records a create inventory transaction', async () => {
+    const app = createApp();
+    const res = await app.request('/api/medicines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '噻呋酰胺', quantity: '10瓶' }),
+    });
+    const body = await res.json();
+    const transaction = testDb
+      .prepare('SELECT * FROM inventory_transactions WHERE medicine_id = ?')
+      .get(body.data.id) as { action_type: string; quantity_after: string; source: string };
+
+    expect(transaction.action_type).toBe('create');
+    expect(transaction.quantity_after).toBe('10瓶');
+    expect(transaction.source).toBe('manual');
+  });
+
   it('returns 400 when name is missing', async () => {
     const app = createApp();
     const res = await app.request('/api/medicines', {
@@ -259,6 +276,53 @@ describe('PUT /api/medicines/:id', () => {
     const body = await res.json();
     expect(body.data.name).toBe('布洛芬改');
   });
+
+  it('records an adjustment transaction when quantity changes', async () => {
+    insertMedicine({ name: '噻呋酰胺', quantity: '10瓶' });
+    const app = createApp();
+    const res = await app.request('/api/medicines/1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '噻呋酰胺', quantity: '8瓶' }),
+    });
+
+    expect(res.status).toBe(200);
+
+    const transaction = testDb
+      .prepare('SELECT * FROM inventory_transactions WHERE medicine_id = ? ORDER BY id DESC')
+      .get(1) as {
+      action_type: string;
+      quantity_before: string;
+      quantity_after: string;
+      quantity_delta: string;
+    };
+
+    expect(transaction.action_type).toBe('adjustment');
+    expect(transaction.quantity_before).toBe('10瓶');
+    expect(transaction.quantity_after).toBe('8瓶');
+    expect(transaction.quantity_delta).toBe('-2瓶');
+  });
+});
+
+describe('GET /api/medicines/:id/transactions', () => {
+  it('returns inventory transactions for a product', async () => {
+    insertMedicine({ name: '噻呋酰胺', quantity: '10瓶' });
+    testDb
+      .prepare(
+        `INSERT INTO inventory_transactions
+         (medicine_id, medicine_name, action_type, quantity_before, quantity_after, quantity_delta, source, reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(1, '噻呋酰胺', 'stock_out', '10瓶', '9瓶', '-1瓶', 'ai', 'AI 库存扣减');
+
+    const app = createApp();
+    const res = await app.request('/api/medicines/1/transactions');
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].quantity_delta).toBe('-1瓶');
+  });
 });
 
 describe('DELETE /api/medicines/:id', () => {
@@ -278,6 +342,12 @@ describe('DELETE /api/medicines/:id', () => {
 
     const check = await app.request('/api/medicines/1');
     expect(check.status).toBe(404);
+
+    const transaction = testDb
+      .prepare('SELECT * FROM inventory_transactions WHERE action_type = ?')
+      .get('delete') as { medicine_id: number | null; medicine_name: string };
+    expect(transaction.medicine_id).toBeNull();
+    expect(transaction.medicine_name).toBe('布洛芬');
   });
 });
 
@@ -322,6 +392,11 @@ describe('POST /api/medicines/import', () => {
 
     const created = testDb.prepare('SELECT * FROM medicines WHERE brand = ?').get('开瑞坦');
     expect(created).toBeDefined();
+
+    const count = testDb
+      .prepare('SELECT COUNT(*) AS count FROM inventory_transactions WHERE source = ?')
+      .get('import') as { count: number };
+    expect(count.count).toBe(2);
   });
 
   it('skips rows with missing name', async () => {
