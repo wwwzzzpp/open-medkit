@@ -44,7 +44,7 @@ export function Layout({
   const themeLabel = resolvedTheme === 'dark' ? '切换到浅色模式' : '切换到暗色模式';
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-bg text-ink transition-colors duration-300">
+    <div className="flex h-screen flex-col overflow-hidden bg-bg text-ink transition-colors duration-300">
       <header className="sticky top-0 z-30 shrink-0 border-b border-white/10 bg-header text-white transition-all duration-300">
         <div className="mx-auto max-w-[1480px] px-4 md:px-5">
           <div className="flex flex-wrap items-center justify-between gap-y-3 py-3 md:h-16 md:py-0">
@@ -134,7 +134,9 @@ export function Layout({
         </div>
       </header>
 
-      <main className="mx-auto flex min-h-0 w-full max-w-[1480px] flex-1 flex-col overflow-hidden px-4 py-5 md:px-5 md:py-5">
+      <main className={`mx-auto flex min-h-0 w-full max-w-[1480px] flex-1 flex-col overflow-hidden ${
+        activeTab === 'manual' ? 'px-4 py-5 md:px-5 md:py-5' : ''
+      }`}>
         {children}
       </main>
     </div>

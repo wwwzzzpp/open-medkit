@@ -1191,7 +1191,7 @@ export function AiPanel({
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-border/40 bg-bg px-4 pb-4 pt-3 md:px-6">
+          <div className="shrink-0 border-t border-border/40 bg-bg px-4 pb-8 pt-3 md:px-6 md:pb-10 relative z-10">
             <div className="mx-auto w-full max-w-[620px]">
               <AiUsageNotice compact />
 
