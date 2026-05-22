@@ -211,6 +211,47 @@ describe('POST /api/ai/query', () => {
     expect(transaction.source).toBe('ai');
   });
 
+  it('sets stock directly for inventory set commands', async () => {
+    testDb
+      .prepare(
+        `INSERT INTO medicines (name, spec, quantity, category) VALUES (?, ?, ?, ?)`,
+      )
+      .run('磷酸二氢钾', '', '3包', '肥料');
+
+    const app = createApp();
+    const res = await app.request('/api/ai/query', {
+      method: 'POST',
+      headers: AI_HEADERS,
+      body: JSON.stringify({ question: '磷酸二氢钾库存修改为1包' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.answer).toContain('已更新库存');
+    expect(body.data.inventoryChanged).toBe(true);
+    expect(body.data.medicines[0].quantity).toBe('1包');
+
+    const row = testDb
+      .prepare('SELECT quantity FROM medicines WHERE name = ?')
+      .get('磷酸二氢钾') as { quantity: string };
+    expect(row.quantity).toBe('1包');
+
+    const transaction = testDb
+      .prepare('SELECT * FROM inventory_transactions WHERE medicine_id = ?')
+      .get(1) as {
+        action_type: string;
+        quantity_before: string;
+        quantity_after: string;
+        quantity_delta: string;
+        source: string;
+      };
+    expect(transaction.action_type).toBe('adjustment');
+    expect(transaction.quantity_before).toBe('3包');
+    expect(transaction.quantity_after).toBe('1包');
+    expect(transaction.quantity_delta).toBe('-2包');
+    expect(transaction.source).toBe('ai');
+  });
+
   it('deducts nearest-expiring batches first for inventory decrease commands', async () => {
     testDb
       .prepare(

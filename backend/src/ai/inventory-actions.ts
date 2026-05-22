@@ -1,6 +1,6 @@
 import type { Medicine } from './medicine';
 
-type InventoryAdjustmentOperation = 'decrease';
+type InventoryAdjustmentOperation = 'decrease' | 'set';
 
 export interface InventoryAdjustmentIntent {
   operation: InventoryAdjustmentOperation;
@@ -31,6 +31,42 @@ const DECREASE_KEYWORDS = [
   '减',
 ];
 
+const SET_KEYWORDS = [
+  '库存修改为',
+  '库存改为',
+  '库存设置为',
+  '库存设为',
+  '库存调整为',
+  '库存改成',
+  '库存变成',
+  '数量修改为',
+  '数量改为',
+  '数量设置为',
+  '数量设为',
+  '数量调整为',
+  '数量改成',
+  '数量变成',
+  '修改为',
+  '改为',
+  '设置为',
+  '设为',
+  '调整为',
+  '改成',
+  '变成',
+  '减少到',
+  '减到',
+  '降到',
+  '降至',
+];
+
+const INVENTORY_ACTIONS: Array<{
+  operation: InventoryAdjustmentOperation;
+  keywords: string[];
+}> = [
+  { operation: 'set', keywords: SET_KEYWORDS },
+  { operation: 'decrease', keywords: DECREASE_KEYWORDS },
+];
+
 const UNIT_PATTERN =
   '(公斤|千克|毫升|kg|KG|Kg|ml|mL|瓶|袋|盒|桶|箱|包|支|件|罐|板|粒|片|颗|枚|卷|套|组|斤|克|g|G|升|L|l|吨)';
 const NUMBER_PATTERN = '([0-9]+(?:\\.[0-9]+)?|[零〇一二两三四五六七八九十百千万]+)';
@@ -52,6 +88,10 @@ const digitMap: Record<string, number> = {
 
 function normalizeText(value: string) {
   return value.replace(/[\s，。,.！!？?：:；;、·\-_/()（）【】\[\]"'“”‘’]/g, '').toLowerCase();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function parseChineseInteger(value: string) {
@@ -113,21 +153,44 @@ export function parseInventoryNumber(value: string) {
   return parseChineseInteger(trimmed);
 }
 
-function findEarliestKeywordIndex(text: string) {
-  return DECREASE_KEYWORDS.reduce<number | null>((earliest, keyword) => {
-    const index = text.indexOf(keyword);
-    if (index < 0) return earliest;
-    return earliest === null ? index : Math.min(earliest, index);
+function findInventoryAction(text: string) {
+  return INVENTORY_ACTIONS.reduce<{
+    operation: InventoryAdjustmentOperation;
+    keyword: string;
+    index: number;
+  } | null>((best, action) => {
+    for (const keyword of action.keywords) {
+      const index = text.indexOf(keyword);
+
+      if (index < 0) {
+        continue;
+      }
+
+      if (
+        best === null ||
+        index < best.index ||
+        (index === best.index && keyword.length > best.keyword.length)
+      ) {
+        best = { operation: action.operation, keyword, index };
+      }
+    }
+
+    return best;
   }, null);
 }
 
-function findRequestedAmount(question: string) {
-  const compact = question.replace(/\s+/g, '');
+function findRequestedAmount(
+  question: string,
+  keywords: string[],
+  options: { allowZero?: boolean } = {},
+) {
+  const compact = question.replace(/[\s，。,.！!？?：:；;、]/g, '');
+  const keywordPattern = keywords.map(escapeRegExp).join('|');
   const afterAction = new RegExp(
-    `(?:${DECREASE_KEYWORDS.join('|')})${NUMBER_PATTERN}\\s*${UNIT_PATTERN}?`,
+    `(?:${keywordPattern})${NUMBER_PATTERN}\\s*${UNIT_PATTERN}?`,
   );
   const beforeAction = new RegExp(
-    `${NUMBER_PATTERN}\\s*${UNIT_PATTERN}?(?:${DECREASE_KEYWORDS.join('|')})`,
+    `${NUMBER_PATTERN}\\s*${UNIT_PATTERN}?(?:${keywordPattern})`,
   );
   const match = compact.match(afterAction) || compact.match(beforeAction);
 
@@ -137,7 +200,12 @@ function findRequestedAmount(question: string) {
 
   const amount = parseInventoryNumber(match[1]);
 
-  if (amount === null || !Number.isFinite(amount) || amount <= 0) {
+  if (
+    amount === null ||
+    !Number.isFinite(amount) ||
+    amount < 0 ||
+    (!options.allowZero && amount <= 0)
+  ) {
     return null;
   }
 
@@ -160,8 +228,8 @@ function medicineCandidateNames(medicine: Medicine) {
 
 function findMedicineForAdjustment(question: string, medicines: Medicine[]) {
   const normalizedQuestion = normalizeText(question);
-  const actionIndex = findEarliestKeywordIndex(question);
-  const subject = actionIndex === null ? '' : normalizeText(question.slice(0, actionIndex));
+  const action = findInventoryAction(question);
+  const subject = action === null ? '' : normalizeText(question.slice(0, action.index));
   const matches: Array<{ medicine: Medicine; score: number }> = [];
 
   medicines.forEach((medicine) => {
@@ -205,15 +273,24 @@ export function parseInventoryAdjustmentIntent(
   question: string,
   medicines: Medicine[],
 ): InventoryAdjustmentIntent | null | { error: string } {
-  if (!DECREASE_KEYWORDS.some((keyword) => question.includes(keyword))) {
+  const action = findInventoryAction(question);
+
+  if (!action) {
     return null;
   }
 
-  const amount = findRequestedAmount(question);
+  const amount = findRequestedAmount(
+    question,
+    INVENTORY_ACTIONS.find((item) => item.operation === action.operation)?.keywords || [],
+    { allowZero: action.operation === 'set' },
+  );
 
   if (!amount) {
     return {
-      error: '我识别到你想调整库存，但没有看清要减少多少。可以这样说：某某农药库存减掉 1 瓶。',
+      error:
+        action.operation === 'set'
+          ? '我识别到你想把库存改成指定数量，但没有看清目标数量。可以这样说：某某农药库存修改为 1 瓶。'
+          : '我识别到你想调整库存，但没有看清要减少多少。可以这样说：某某农药库存减掉 1 瓶。',
     };
   }
 
@@ -227,12 +304,12 @@ export function parseInventoryAdjustmentIntent(
 
   if (medicine === 'ambiguous') {
     return {
-      error: '我识别到多个相似产品，暂时不敢自动扣减。请把产品名称写完整一点。',
+      error: '我识别到多个相似产品，暂时不敢自动调整库存。请把产品名称写完整一点。',
     };
   }
 
   return {
-    operation: 'decrease',
+    operation: action.operation,
     medicine,
     amount: amount.amount,
     unit: amount.unit,

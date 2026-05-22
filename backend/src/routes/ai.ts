@@ -56,6 +56,14 @@ function formatMedicineName(medicine: Medicine) {
     : medicine.name;
 }
 
+function formatTransactionDelta(amount: number, unit: string) {
+  if (amount > 0) {
+    return `+${formatStockQuantity(amount, unit)}`;
+  }
+
+  return formatStockQuantity(amount, unit);
+}
+
 function loadBatchesForDeduction(medicineId: number) {
   const db = getDb();
   return db
@@ -166,11 +174,21 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
     };
   }
 
-  const nextAmount = current.amount - intent.amount;
+  const nextAmount =
+    intent.operation === 'set' ? intent.amount : current.amount - intent.amount;
+  const deltaAmount = nextAmount - current.amount;
 
-  if (nextAmount < 0) {
+  if (intent.operation === 'decrease' && nextAmount < 0) {
     return {
       answer: `库存不足，暂时没有更新。**${formatMedicineName(intent.medicine)}** 当前只有 ${formatStockQuantity(current.amount, unit)}，不能减掉 ${formatStockQuantity(intent.amount, unit)}。`,
+      medicines: [intent.medicine],
+      inventoryChanged: false,
+    };
+  }
+
+  if (intent.operation === 'set' && deltaAmount === 0) {
+    return {
+      answer: `**${formatMedicineName(intent.medicine)}** 当前库存已经是 ${formatStockQuantity(current.amount, unit)}，不需要修改。`,
       medicines: [intent.medicine],
       inventoryChanged: false,
     };
@@ -179,11 +197,29 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
   const nextQuantity = formatStockQuantity(nextAmount, unit);
   const db = getDb();
   const batches = loadBatchesForDeduction(intent.medicine.id);
-  const batchPlan = buildBatchDeductions(batches, intent.amount, unit);
+  let batchPlan = {
+    deductions: [] as Array<{ batch: InventoryBatchRecord; before: string; after: string; amount: number }>,
+  };
 
-  if ('error' in batchPlan) {
+  if (intent.operation === 'decrease' || deltaAmount < 0) {
+    const plannedDeductions = buildBatchDeductions(
+      batches,
+      Math.abs(deltaAmount),
+      unit,
+    );
+
+    if ('error' in plannedDeductions) {
+      return {
+        answer: plannedDeductions.error,
+        medicines: [intent.medicine],
+        inventoryChanged: false,
+      };
+    }
+
+    batchPlan = plannedDeductions;
+  } else if (intent.operation === 'set' && deltaAmount > 0 && batches.length > 0) {
     return {
-      answer: batchPlan.error,
+      answer: `**${formatMedicineName(intent.medicine)}** 已经建立批次，增加总库存需要指定入库批次。请在批次库存里新增入库，或先说清楚要加到哪个批次。`,
       medicines: [intent.medicine],
       inventoryChanged: false,
     };
@@ -207,8 +243,9 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
     .get(intent.medicine.id) as MedicineRecord;
   const updatedMedicine = rowToMedicine(updatedRow);
   const spec = updatedMedicine.spec ? `（${updatedMedicine.spec}）` : '';
+  const batchLabel = intent.operation === 'set' ? '批次同步' : '批次扣减';
   const batchNote = batchPlan.deductions.length
-    ? `批次扣减：${batchPlan.deductions
+    ? `${batchLabel}：${batchPlan.deductions
         .map((deduction) =>
           `${deduction.batch.batch_no || `#${deduction.batch.id}`} ${deduction.before}→${deduction.after}`,
         )
@@ -218,12 +255,19 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
   recordInventoryTransaction(db, {
     medicineId: updatedMedicine.id,
     medicineName: formatMedicineName(updatedMedicine),
-    actionType: 'stock_out',
+    actionType: intent.operation === 'set' ? 'adjustment' : 'stock_out',
     quantityBefore: formatStockQuantity(current.amount, unit),
     quantityAfter: nextQuantity,
-    quantityDelta: formatStockQuantity(-intent.amount, unit),
+    quantityDelta: formatTransactionDelta(deltaAmount, unit),
     source: 'ai',
-    reason: batchPlan.deductions.length ? 'AI 库存扣减（近效期批次优先）' : 'AI 库存扣减',
+    reason:
+      intent.operation === 'set'
+        ? batchPlan.deductions.length
+          ? 'AI 库存修正（近效期批次优先同步）'
+          : 'AI 库存修正'
+        : batchPlan.deductions.length
+          ? 'AI 库存扣减（近效期批次优先）'
+          : 'AI 库存扣减',
     note: [question, batchNote].filter(Boolean).join('\n'),
   });
 

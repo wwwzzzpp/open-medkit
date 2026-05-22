@@ -45,9 +45,21 @@ describe('inventory actions', () => {
       makeMedicine({}),
     ]);
 
+    expect(intent && !('error' in intent) ? intent.operation : null).toBe('decrease');
     expect(intent && !('error' in intent) ? intent.amount : null).toBe(1);
     expect(intent && !('error' in intent) ? intent.unit : null).toBe('');
     expect(intent && !('error' in intent) ? intent.medicine.id : null).toBe(1);
+  });
+
+  it('detects absolute stock set commands and matched product', () => {
+    const intent = parseInventoryAdjustmentIntent('磷酸二氢钾库存修改为1包', [
+      makeMedicine({ id: 2, name: '磷酸二氢钾', quantity: '3包', category: '肥料' }),
+    ]);
+
+    expect(intent && !('error' in intent) ? intent.operation : null).toBe('set');
+    expect(intent && !('error' in intent) ? intent.amount : null).toBe(1);
+    expect(intent && !('error' in intent) ? intent.unit : null).toBe('包');
+    expect(intent && !('error' in intent) ? intent.medicine.id : null).toBe(2);
   });
 
   it('keeps stock quantity formatting compact', () => {
