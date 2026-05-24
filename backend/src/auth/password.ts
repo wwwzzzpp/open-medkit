@@ -23,7 +23,7 @@ export function getAuthConfig(): AuthConfig {
 }
 
 export function isAuthEnabled(): boolean {
-  return getAuthConfig().mode !== 'disabled';
+  return true;
 }
 
 function safeCompare(input: string, expected: string): boolean {

@@ -5,6 +5,7 @@ export type AiEnv = {
     aiApiKey: string;
     aiBaseUrl: string;
     aiModel: string;
+    userId: number;
   };
 };
 

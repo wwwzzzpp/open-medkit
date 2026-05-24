@@ -54,7 +54,7 @@ function sanitizeChannel(row: ChannelRow) {
   };
 }
 
-export const notificationsRouter = new Hono();
+export const notificationsRouter = new Hono<{ Variables: { userId: number } }>();
 
 // ---- GET /channels ----
 notificationsRouter.get('/channels', (c) => {

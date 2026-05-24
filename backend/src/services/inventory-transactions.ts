@@ -5,6 +5,7 @@ export type InventoryActionType = 'create' | 'stock_in' | 'stock_out' | 'adjustm
 export type InventoryTransactionSource = 'manual' | 'ai' | 'import';
 
 export interface InventoryTransactionInput {
+  userId: number;
   medicineId?: number | null;
   medicineName: string;
   actionType: InventoryActionType;
@@ -64,10 +65,11 @@ export function recordInventoryTransaction(
   db.prepare(
     `
       INSERT INTO inventory_transactions
-      (medicine_id, medicine_name, action_type, quantity_before, quantity_after, quantity_delta, source, reason, note)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (user_id, medicine_id, medicine_name, action_type, quantity_before, quantity_after, quantity_delta, source, reason, note)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
   ).run(
+    input.userId,
     input.medicineId || null,
     input.medicineName.trim() || '未知产品',
     input.actionType,
@@ -82,6 +84,7 @@ export function recordInventoryTransaction(
 
 export function listInventoryTransactions(
   db: SqliteDatabase,
+  userId: number,
   medicineId: number,
   limit = 30,
 ) {
@@ -92,10 +95,10 @@ export function listInventoryTransactions(
       `
         SELECT *
         FROM inventory_transactions
-        WHERE medicine_id = ?
+        WHERE user_id = ? AND medicine_id = ?
         ORDER BY created_at DESC, id DESC
         LIMIT ?
       `,
     )
-    .all(medicineId, normalizedLimit) as InventoryTransactionRecord[];
+    .all(userId, medicineId, normalizedLimit) as InventoryTransactionRecord[];
 }

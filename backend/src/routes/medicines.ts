@@ -147,25 +147,28 @@ function rowToBatch(row: InventoryBatchRecord) {
   };
 }
 
-function getExistingMedicine(db: ReturnType<typeof getDb>, id: number) {
+function getExistingMedicine(db: ReturnType<typeof getDb>, id: number, userId: number) {
   return db
-    .prepare('SELECT * FROM medicines WHERE id = ?')
-    .get(id) as MedicineRecord | undefined;
+    .prepare('SELECT * FROM medicines WHERE id = ? AND user_id = ?')
+    .get(id, userId) as MedicineRecord | undefined;
 }
 
-export const medicinesRouter = new Hono();
+export const medicinesRouter = new Hono<{ Variables: { userId: number } }>();
 
 medicinesRouter.get('/', (c) => {
   try {
     const db = getDb();
+    const userId = c.get('userId');
     const category = c.req.query('category');
     const status = c.req.query('status');
+//     const userId = c.get('userId');
     const expiringDays = normalizeExpiringDays(c.req.query('expiringDays'));
     const { timezone } = getStoredTimezone(db);
     const { todayStr, warningDateStr } = getDateBoundaries(timezone, expiringDays);
 
-    const conditions: string[] = [];
-    const params: string[] = [];
+    const conditions: string[] = ['user_id = ?'];
+    const params: (string|number)[] = [userId];
+    // const params: string[] = [];
 
     if (category) {
       conditions.push('category = ?');
@@ -203,6 +206,7 @@ medicinesRouter.get('/', (c) => {
 });
 
 medicinesRouter.get('/stats', (c) => {
+  const userId = c.get('userId');
   try {
     const db = getDb();
     const expiringDays = normalizeExpiringDays(c.req.query('expiringDays'));
@@ -218,9 +222,10 @@ medicinesRouter.get('/stats', (c) => {
             SUM(CASE WHEN expires_at IS NOT NULL AND expires_at != '' AND expires_at >= ? AND expires_at <= ? THEN 1 ELSE 0 END) AS expiring,
             SUM(CASE WHEN expires_at IS NOT NULL AND expires_at != '' AND expires_at > ? THEN 1 ELSE 0 END) AS ok
           FROM medicines
+          WHERE user_id = ?
         `
       )
-      .get(todayStr, todayStr, warningDateStr, warningDateStr) as {
+      .get(todayStr, todayStr, warningDateStr, warningDateStr, userId) as {
       total: number;
       expired: number | null;
       expiring: number | null;
@@ -232,12 +237,12 @@ medicinesRouter.get('/stats', (c) => {
         `
           SELECT category, COUNT(*) AS count
           FROM medicines
-          WHERE category IS NOT NULL AND category != ''
+          WHERE user_id = ? AND category IS NOT NULL AND category != ''
           GROUP BY category
           ORDER BY count DESC, category ASC
         `
       )
-      .all() as { category: string; count: number }[];
+      .all(userId) as { category: string; count: number }[];
 
     return c.json({
       data: {
@@ -262,9 +267,10 @@ medicinesRouter.get('/stats', (c) => {
 medicinesRouter.get('/export', (c) => {
   try {
     const db = getDb();
+    const userId = c.get('userId');
     const medicines = db
-      .prepare('SELECT * FROM medicines ORDER BY expires_at IS NULL ASC, expires_at ASC, id ASC')
-      .all() as MedicineRecord[];
+      .prepare('SELECT * FROM medicines WHERE user_id = ? ORDER BY expires_at IS NULL ASC, expires_at ASC, id ASC')
+      .all(userId) as MedicineRecord[];
     const today = new Date().toISOString().slice(0, 10);
 
     c.header('Content-Type', 'application/json');
@@ -292,6 +298,7 @@ medicinesRouter.get('/export', (c) => {
 medicinesRouter.post('/import', async (c) => {
   try {
     const body = await c.req.json();
+    const userId = c.get('userId');
     const importedRows = Array.isArray(body?.medicines) ? body.medicines : null;
 
     if (!importedRows) {
@@ -302,8 +309,8 @@ medicinesRouter.post('/import', async (c) => {
     const insert = db.prepare(
       `
         INSERT INTO medicines
-        (name, brand, name_en, spec, quantity, expires_at, category, usage_desc, location, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (user_id, name, brand, name_en, spec, quantity, expires_at, category, usage_desc, location, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     );
 
@@ -323,6 +330,7 @@ medicinesRouter.post('/import', async (c) => {
 
         try {
           const result = insert.run(
+            userId,
             normalized.name,
             normalized.brand || null,
             normalized.name_en || null,
@@ -335,6 +343,7 @@ medicinesRouter.post('/import', async (c) => {
             normalized.notes || null
           );
           recordInventoryTransaction(db, {
+            userId,
             medicineId: Number(result.lastInsertRowid),
             medicineName: normalized.name,
             actionType: 'create',
@@ -373,16 +382,17 @@ medicinesRouter.post('/import', async (c) => {
 medicinesRouter.get('/categories', (c) => {
   try {
     const db = getDb();
+    const userId = c.get('userId');
     const categories = db
       .prepare(
         `
           SELECT DISTINCT category
           FROM medicines
-          WHERE category IS NOT NULL AND category != ''
+          WHERE user_id = ? AND category IS NOT NULL AND category != ''
           ORDER BY category ASC
         `
       )
-      .all() as { category: string }[];
+      .all(userId) as { category: string }[];
 
     const merged = [...DEFAULT_CATEGORIES];
 
@@ -407,17 +417,19 @@ medicinesRouter.get('/categories', (c) => {
 medicinesRouter.get('/:id/transactions', (c) => {
   try {
     const db = getDb();
+    const userId = c.get('userId');
     const id = Number(c.req.param('id'));
+//     const userId = c.get('userId');
     const limit = Number(c.req.query('limit') || 30);
     const existing = db
-      .prepare('SELECT id FROM medicines WHERE id = ?')
-      .get(id) as { id: number } | undefined;
+      .prepare('SELECT id FROM medicines WHERE id = ? AND user_id = ?')
+      .get(id, userId) as { id: number } | undefined;
 
     if (!existing) {
       return c.json({ error: 'Medicine not found' }, 404);
     }
 
-    return c.json({ data: listInventoryTransactions(db, id, limit) });
+    return c.json({ data: listInventoryTransactions(db, userId, id, limit) });
   } catch (error) {
     return c.json(
       {
@@ -430,10 +442,11 @@ medicinesRouter.get('/:id/transactions', (c) => {
 });
 
 medicinesRouter.get('/:id/batches', (c) => {
+  const userId = c.get('userId');
   try {
     const db = getDb();
     const id = Number(c.req.param('id'));
-    const existing = getExistingMedicine(db, id);
+    const existing = getExistingMedicine(db, id, userId);
 
     if (!existing) {
       return c.json({ error: 'Medicine not found' }, 404);
@@ -444,11 +457,11 @@ medicinesRouter.get('/:id/batches', (c) => {
         `
           SELECT *
           FROM inventory_batches
-          WHERE medicine_id = ?
+          WHERE user_id = ? AND medicine_id = ?
           ORDER BY expires_at IS NULL ASC, expires_at ASC, id ASC
         `,
       )
-      .all(id) as InventoryBatchRecord[];
+      .all(userId, id) as InventoryBatchRecord[];
 
     return c.json({ data: rows.map(rowToBatch) });
   } catch (error) {
@@ -463,15 +476,17 @@ medicinesRouter.get('/:id/batches', (c) => {
 });
 
 medicinesRouter.post('/:id/batches', async (c) => {
+  const userId = c.get('userId');
   try {
     const db = getDb();
     const id = Number(c.req.param('id'));
-    const medicine = getExistingMedicine(db, id);
+    const medicine = getExistingMedicine(db, id, userId);
 
     if (!medicine) {
       return c.json({ error: 'Medicine not found' }, 404);
     }
 
+    const userId = c.get('userId');
     const payload = normalizeBatchInput((await c.req.json()) as Partial<InventoryBatchInput>);
     const hasContent = Object.values(payload).some((value) => value.length > 0);
 
@@ -483,11 +498,12 @@ medicinesRouter.post('/:id/batches', async (c) => {
       .prepare(
         `
           INSERT INTO inventory_batches
-          (medicine_id, batch_no, production_date, expires_at, quantity, purchase_date, supplier, location, notes)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (user_id, medicine_id, batch_no, production_date, expires_at, quantity, purchase_date, supplier, location, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
+        userId,
         id,
         payload.batch_no || null,
         payload.production_date || null,
@@ -501,9 +517,13 @@ medicinesRouter.post('/:id/batches', async (c) => {
 
     if (payload.quantity) {
       recordInventoryTransaction(db, {
-        medicineId: id,
-        medicineName: medicine.name,
-        actionType: 'stock_in',
+//         userId,
+        
+
+userId,
+                    medicineId: id,
+          medicineName: medicine.name,
+          actionType: 'stock_in',
         quantityBefore: '',
         quantityAfter: payload.quantity,
         quantityDelta: `+${payload.quantity}`,
@@ -513,8 +533,8 @@ medicinesRouter.post('/:id/batches', async (c) => {
     }
 
     const batch = db
-      .prepare('SELECT * FROM inventory_batches WHERE id = ?')
-      .get(result.lastInsertRowid) as InventoryBatchRecord;
+      .prepare('SELECT * FROM inventory_batches WHERE id = ? AND user_id = ?')
+      .get(result.lastInsertRowid, userId) as InventoryBatchRecord;
 
     return c.json({ data: rowToBatch(batch) }, 201);
   } catch (error) {
@@ -532,16 +552,17 @@ medicinesRouter.put('/:id/batches/:batchId', async (c) => {
   try {
     const db = getDb();
     const id = Number(c.req.param('id'));
+    const userId = c.get('userId');
     const batchId = Number(c.req.param('batchId'));
-    const medicine = getExistingMedicine(db, id);
+    const medicine = getExistingMedicine(db, id, userId);
 
     if (!medicine) {
       return c.json({ error: 'Medicine not found' }, 404);
     }
 
     const existing = db
-      .prepare('SELECT * FROM inventory_batches WHERE id = ? AND medicine_id = ?')
-      .get(batchId, id) as InventoryBatchRecord | undefined;
+      .prepare('SELECT * FROM inventory_batches WHERE id = ? AND user_id = ? AND medicine_id = ?')
+      .get(batchId, userId, id) as InventoryBatchRecord | undefined;
 
     if (!existing) {
       return c.json({ error: 'Batch not found' }, 404);
@@ -553,7 +574,7 @@ medicinesRouter.put('/:id/batches/:batchId', async (c) => {
       `
         UPDATE inventory_batches
         SET batch_no = ?, production_date = ?, expires_at = ?, quantity = ?, purchase_date = ?, supplier = ?, location = ?, notes = ?
-        WHERE id = ? AND medicine_id = ?
+        WHERE id = ? AND user_id = ? AND medicine_id = ?
       `,
     ).run(
       payload.batch_no || null,
@@ -565,14 +586,18 @@ medicinesRouter.put('/:id/batches/:batchId', async (c) => {
       payload.location || null,
       payload.notes || null,
       batchId,
+      userId,
       id,
     );
 
     if ((existing.quantity || '') !== payload.quantity) {
       recordInventoryTransaction(db, {
-        medicineId: id,
-        medicineName: medicine.name,
-        actionType: 'adjustment',
+        userId,
+
+userId,
+                    medicineId: id,
+          medicineName: medicine.name,
+          actionType: 'adjustment',
         quantityBefore: existing.quantity || '',
         quantityAfter: payload.quantity,
         source: 'manual',
@@ -581,8 +606,8 @@ medicinesRouter.put('/:id/batches/:batchId', async (c) => {
     }
 
     const batch = db
-      .prepare('SELECT * FROM inventory_batches WHERE id = ?')
-      .get(batchId) as InventoryBatchRecord;
+      .prepare('SELECT * FROM inventory_batches WHERE id = ? AND user_id = ?')
+      .get(batchId, userId) as InventoryBatchRecord;
 
     return c.json({ data: rowToBatch(batch) });
   } catch (error) {
@@ -597,19 +622,20 @@ medicinesRouter.put('/:id/batches/:batchId', async (c) => {
 });
 
 medicinesRouter.delete('/:id/batches/:batchId', (c) => {
+  const userId = c.get('userId');
   try {
     const db = getDb();
     const id = Number(c.req.param('id'));
     const batchId = Number(c.req.param('batchId'));
-    const medicine = getExistingMedicine(db, id);
+    const medicine = getExistingMedicine(db, id, userId);
 
     if (!medicine) {
       return c.json({ error: 'Medicine not found' }, 404);
     }
 
     const existing = db
-      .prepare('SELECT * FROM inventory_batches WHERE id = ? AND medicine_id = ?')
-      .get(batchId, id) as InventoryBatchRecord | undefined;
+      .prepare('SELECT * FROM inventory_batches WHERE id = ? AND user_id = ? AND medicine_id = ?')
+      .get(batchId, userId, id) as InventoryBatchRecord | undefined;
 
     if (!existing) {
       return c.json({ error: 'Batch not found' }, 404);
@@ -617,9 +643,12 @@ medicinesRouter.delete('/:id/batches/:batchId', (c) => {
 
     if (existing.quantity) {
       recordInventoryTransaction(db, {
-        medicineId: id,
-        medicineName: medicine.name,
-        actionType: 'adjustment',
+        userId,
+
+userId,
+                    medicineId: id,
+          medicineName: medicine.name,
+          actionType: 'adjustment',
         quantityBefore: existing.quantity,
         quantityAfter: '',
         quantityDelta: `-${existing.quantity}`,
@@ -628,7 +657,7 @@ medicinesRouter.delete('/:id/batches/:batchId', (c) => {
       });
     }
 
-    db.prepare('DELETE FROM inventory_batches WHERE id = ? AND medicine_id = ?').run(batchId, id);
+    db.prepare('DELETE FROM inventory_batches WHERE id = ? AND user_id = ? AND medicine_id = ?').run(batchId, userId, id);
 
     return c.json({ data: { deleted: true } });
   } catch (error) {
@@ -643,13 +672,14 @@ medicinesRouter.delete('/:id/batches/:batchId', (c) => {
 });
 
 medicinesRouter.get('/:id', (c) => {
+  const userId = c.get('userId');
   try {
     const db = getDb();
     const id = Number(c.req.param('id'));
 
     const medicine = db
-      .prepare('SELECT * FROM medicines WHERE id = ?')
-      .get(id) as MedicineRecord | undefined;
+      .prepare('SELECT * FROM medicines WHERE id = ? AND user_id = ?')
+    .get(id, userId) as MedicineRecord | undefined;
 
     if (!medicine) {
       return c.json({ error: 'Medicine not found' }, 404);
@@ -668,6 +698,7 @@ medicinesRouter.get('/:id', (c) => {
 });
 
 medicinesRouter.post('/', async (c) => {
+  const userId = c.get('userId');
   try {
     const db = getDb();
     const payload = normalizeMedicineInput((await c.req.json()) as Partial<MedicineInput>);
@@ -680,11 +711,12 @@ medicinesRouter.post('/', async (c) => {
       .prepare(
         `
           INSERT INTO medicines
-          (name, brand, name_en, spec, quantity, expires_at, category, usage_desc, location, notes)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (user_id, name, brand, name_en, spec, quantity, expires_at, category, usage_desc, location, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       )
       .run(
+        userId,
         payload.name,
         payload.brand || null,
         payload.name_en || null,
@@ -698,10 +730,11 @@ medicinesRouter.post('/', async (c) => {
       );
 
     const medicine = db
-      .prepare('SELECT * FROM medicines WHERE id = ?')
-      .get(result.lastInsertRowid) as MedicineRecord;
+      .prepare('SELECT * FROM medicines WHERE id = ? AND user_id = ?')
+      .get(result.lastInsertRowid, userId) as MedicineRecord;
 
     recordInventoryTransaction(db, {
+      userId,
       medicineId: medicine.id,
       medicineName: medicine.name,
       actionType: 'create',
@@ -725,12 +758,13 @@ medicinesRouter.post('/', async (c) => {
 });
 
 medicinesRouter.put('/:id', async (c) => {
+  const userId = c.get('userId');
   try {
     const db = getDb();
     const id = Number(c.req.param('id'));
     const existing = db
-      .prepare('SELECT * FROM medicines WHERE id = ?')
-      .get(id) as MedicineRecord | undefined;
+      .prepare('SELECT * FROM medicines WHERE id = ? AND user_id = ?')
+    .get(id, userId) as MedicineRecord | undefined;
 
     if (!existing) {
       return c.json({ error: 'Medicine not found' }, 404);
@@ -746,7 +780,7 @@ medicinesRouter.put('/:id', async (c) => {
       `
         UPDATE medicines
         SET name = ?, brand = ?, name_en = ?, spec = ?, quantity = ?, expires_at = ?, category = ?, usage_desc = ?, location = ?, notes = ?
-        WHERE id = ?
+        WHERE id = ? AND user_id = ?
       `
     ).run(
       payload.name,
@@ -759,18 +793,22 @@ medicinesRouter.put('/:id', async (c) => {
       payload.usage_desc || null,
       payload.location || null,
       payload.notes || null,
-      id
+      id,
+      userId
     );
 
     const medicine = db
-      .prepare('SELECT * FROM medicines WHERE id = ?')
-      .get(id) as MedicineRecord;
+      .prepare('SELECT * FROM medicines WHERE id = ? AND user_id = ?')
+    .get(id, userId) as MedicineRecord;
 
     if ((existing.quantity || '') !== (payload.quantity || '')) {
       recordInventoryTransaction(db, {
-        medicineId: id,
-        medicineName: medicine.name,
-        actionType: 'adjustment',
+        userId,
+
+userId,
+                    medicineId: id,
+          medicineName: medicine.name,
+          actionType: 'adjustment',
         quantityBefore: existing.quantity || '',
         quantityAfter: payload.quantity,
         source: 'manual',
@@ -791,18 +829,20 @@ medicinesRouter.put('/:id', async (c) => {
 });
 
 medicinesRouter.delete('/:id', (c) => {
+  const userId = c.get('userId');
   try {
     const db = getDb();
     const id = Number(c.req.param('id'));
     const existing = db
-      .prepare('SELECT * FROM medicines WHERE id = ?')
-      .get(id) as MedicineRecord | undefined;
+      .prepare('SELECT * FROM medicines WHERE id = ? AND user_id = ?')
+    .get(id, userId) as MedicineRecord | undefined;
 
     if (!existing) {
       return c.json({ error: 'Medicine not found' }, 404);
     }
 
     recordInventoryTransaction(db, {
+      userId,
       medicineId: id,
       medicineName: existing.name,
       actionType: 'delete',
@@ -813,7 +853,7 @@ medicinesRouter.delete('/:id', (c) => {
       reason: '删除产品',
     });
 
-    const result = db.prepare('DELETE FROM medicines WHERE id = ?').run(id);
+    const result = db.prepare('DELETE FROM medicines WHERE id = ? AND user_id = ?').run(id, userId);
 
     if (result.changes === 0) {
       return c.json({ error: 'Medicine not found' }, 404);

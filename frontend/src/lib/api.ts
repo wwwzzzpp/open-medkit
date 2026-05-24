@@ -36,16 +36,30 @@ function emit401IfNeeded(url: string) {
 // Auth API
 // ---------------------------------------------------------------------------
 
-export async function getAuthStatus(): Promise<{ requiresAuth: boolean; authenticated: boolean }> {
+export async function getAuthStatus(): Promise<{ requiresAuth: boolean; authenticated: boolean; user?: { id: number; username: string } }> {
   const response = await fetch(`${API_BASE}/auth/status`, { credentials: 'include' });
   return response.json();
 }
 
-export async function login(password: string): Promise<void> {
+export async function register(username: string, password: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error || 'Register failed');
+  }
+}
+
+export async function login(username: string, password: string): Promise<void> {
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ username, password }),
     credentials: 'include',
   });
 

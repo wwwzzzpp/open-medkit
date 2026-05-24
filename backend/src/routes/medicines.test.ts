@@ -13,7 +13,7 @@ vi.mock('../db/client', () => ({
 import { medicinesRouter } from './medicines';
 
 function createApp() {
-  const app = new Hono();
+  const app = new Hono<{ Variables: { userId: number } }>();
   app.route('/api/medicines', medicinesRouter);
   return app;
 }

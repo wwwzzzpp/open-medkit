@@ -14,6 +14,7 @@ type AuthState = 'loading' | 'public' | 'authenticated' | 'unauthenticated';
 
 interface AuthContextValue {
   requiresAuth: boolean;
+  user: { id: number; username: string } | null;
   logout: () => Promise<void>;
 }
 
@@ -28,11 +29,13 @@ export function useAuth() {
 export function AuthGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>('loading');
   const [requiresAuth, setRequiresAuth] = useState(false);
+  const [user, setUser] = useState<{ id: number; username: string } | null>(null);
 
   const checkAuth = useCallback(async () => {
     try {
       const status = await getAuthStatus();
       setRequiresAuth(status.requiresAuth);
+      setUser(status.user || null);
 
       if (!status.requiresAuth) {
         setState('public');
@@ -44,6 +47,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     } catch {
       setState('unauthenticated');
       setRequiresAuth(true);
+      setUser(null);
     }
   }, []);
 
@@ -81,7 +85,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ requiresAuth, logout }}>
+    <AuthContext.Provider value={{ requiresAuth, user, logout }}>
       {children}
     </AuthContext.Provider>
   );

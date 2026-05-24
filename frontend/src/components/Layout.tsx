@@ -8,7 +8,10 @@ import {
   SlidersHorizontal,
   SunMedium,
   BotIcon,
+  LogOut,
 } from 'lucide-react';
+
+import { useAuth } from './AuthGate';
 
 interface LayoutProps {
   children: ReactNode;
@@ -42,6 +45,7 @@ export function Layout({
 }: LayoutProps) {
   const ThemeIcon = resolvedTheme === 'dark' ? SunMedium : MoonStar;
   const themeLabel = resolvedTheme === 'dark' ? '切换到浅色模式' : '切换到暗色模式';
+  const { user, logout } = useAuth();
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-bg text-ink transition-colors duration-300">
@@ -103,6 +107,20 @@ export function Layout({
               >
                 <Settings className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
               </button>
+
+              {user && (
+                <div className="flex items-center gap-2 ml-2 pl-2 border-l border-white/20">
+                  <span className="text-[13px] text-white/80 max-w-[80px] truncate" title={user.username}>{user.username}</span>
+                  <button
+                    type="button"
+                    onClick={() => void logout()}
+                    className="inline-flex h-8 w-8 min-w-[32px] shrink-0 items-center justify-center rounded-lg text-white/65 transition-all duration-200 hover:bg-white/10 hover:text-white active:scale-95"
+                    aria-label="退出登录"
+                  >
+                    <LogOut className="h-[16px] w-[16px] shrink-0" strokeWidth={2} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Tabs */}

@@ -290,8 +290,8 @@ describe('resolveQueryResult', () => {
     const result = resolveQueryResult(raw, medicines, '2026-03-29', '2026-04-28', 30, 'concise');
     expect('data' in result).toBe(true);
     if ('data' in result) {
-      expect(result.data.answer).toContain('布洛芬');
-      expect(result.data.medicines.length).toBeGreaterThanOrEqual(1);
+      expect(result.data!.answer).toContain('布洛芬');
+      expect(result.data!.medicines.length).toBeGreaterThanOrEqual(1);
     }
   });
 
@@ -300,7 +300,7 @@ describe('resolveQueryResult', () => {
     const result = resolveQueryResult(raw, medicines, '2026-03-29', '2026-04-28', 30, 'concise');
     expect('data' in result).toBe(true);
     if ('data' in result) {
-      expect(result.data.medicines.map((m) => m.id)).toContain(1);
+      expect(result.data!.medicines.map((m) => m.id)).toContain(1);
     }
   });
 

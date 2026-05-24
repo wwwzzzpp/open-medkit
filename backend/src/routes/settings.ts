@@ -7,7 +7,7 @@ import {
   setStoredTimezone,
 } from '../utils/timezone';
 
-export const settingsRouter = new Hono();
+export const settingsRouter = new Hono<{ Variables: { userId: number } }>();
 
 settingsRouter.get('/', (c) => {
   try {

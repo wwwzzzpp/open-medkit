@@ -9,6 +9,7 @@ import type { QueryResponseStyle } from './types';
 
 export interface MedicineRecord {
   id: number;
+  user_id: number;
   name: string;
   brand: string | null;
   name_en: string | null;
@@ -138,10 +139,10 @@ export async function getDynamicCategories() {
   return merged;
 }
 
-export function getAllMedicines() {
+export function getAllMedicines(userId: number) {
   const db = getDb();
   const rows = db
-    .prepare('SELECT * FROM medicines ORDER BY expires_at IS NULL ASC, expires_at ASC, id ASC')
-    .all() as MedicineRecord[];
+    .prepare('SELECT * FROM medicines WHERE user_id = ? ORDER BY expires_at IS NULL ASC, expires_at ASC, id ASC')
+    .all(userId) as MedicineRecord[];
   return rows.map(rowToMedicine);
 }

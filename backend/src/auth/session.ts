@@ -6,6 +6,7 @@ const RATE_LIMIT_MAX_ATTEMPTS = 5;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 interface SessionEntry {
+  userId: number;
   expiresAt: number;
 }
 
@@ -21,9 +22,9 @@ const rateLimits = new Map<string, RateLimitEntry>();
 // Session management
 // ---------------------------------------------------------------------------
 
-export function createSession(): string {
+export function createSession(userId: number): string {
   const token = crypto.randomUUID();
-  sessions.set(token, { expiresAt: Date.now() + SESSION_TTL_MS });
+  sessions.set(token, { userId, expiresAt: Date.now() + SESSION_TTL_MS });
   return token;
 }
 
@@ -35,6 +36,16 @@ export function validateSession(token: string): boolean {
     return false;
   }
   return true;
+}
+
+export function getSessionUserId(token: string): number | null {
+  const entry = sessions.get(token);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    sessions.delete(token);
+    return null;
+  }
+  return entry.userId;
 }
 
 export function removeSession(token: string): void {

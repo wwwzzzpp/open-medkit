@@ -40,7 +40,7 @@ vi.mock('../services/notifier', async (importOriginal) => {
 import { notificationsRouter } from './notifications';
 
 function createApp() {
-  const app = new Hono();
+  const app = new Hono<{ Variables: { userId: number } }>();
   app.route('/api/notifications', notificationsRouter);
   return app;
 }

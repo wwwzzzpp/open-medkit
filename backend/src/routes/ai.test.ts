@@ -28,7 +28,7 @@ vi.mock('../ai/client', () => ({
 import { aiRouter } from './ai';
 
 function createApp() {
-  const app = new Hono();
+  const app = new Hono<{ Variables: { userId: number } }>();
   app.route('/api/ai', aiRouter);
   return app;
 }

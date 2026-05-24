@@ -226,7 +226,7 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
   }
 
   const updateProductAndBatches = db.transaction(() => {
-    db.prepare('UPDATE medicines SET quantity = ? WHERE id = ?').run(nextQuantity, intent.medicine.id);
+    db.prepare('UPDATE medicines SET quantity = ? WHERE id = ? AND user_id = ?').run(nextQuantity, intent.medicine.id, intent.medicine.user_id);
 
     batchPlan.deductions.forEach((deduction) => {
       db.prepare('UPDATE inventory_batches SET quantity = ? WHERE id = ?').run(
@@ -239,8 +239,8 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
   updateProductAndBatches();
 
   const updatedRow = db
-    .prepare('SELECT * FROM medicines WHERE id = ?')
-    .get(intent.medicine.id) as MedicineRecord;
+    .prepare('SELECT * FROM medicines WHERE id = ? AND user_id = ?')
+    .get(intent.medicine.id, intent.medicine.user_id) as MedicineRecord;
   const updatedMedicine = rowToMedicine(updatedRow);
   const spec = updatedMedicine.spec ? `（${updatedMedicine.spec}）` : '';
   const batchLabel = intent.operation === 'set' ? '批次同步' : '批次扣减';
@@ -253,6 +253,7 @@ function applyInventoryAdjustment(question: string, medicines: Medicine[]) {
     : '';
 
   recordInventoryTransaction(db, {
+    userId: updatedMedicine.user_id,
     medicineId: updatedMedicine.id,
     medicineName: formatMedicineName(updatedMedicine),
     actionType: intent.operation === 'set' ? 'adjustment' : 'stock_out',
@@ -646,7 +647,8 @@ aiRouter.post('/query-stream', async (c) => {
       return c.json({ error: 'Question is required' }, 400);
     }
 
-    const medicines = getAllMedicines();
+    const userId = c.get('userId');
+    const medicines = getAllMedicines(userId);
     const { todayStr, in30daysStr } = getDateBoundaries(expiringDays);
     const encoder = new TextEncoder();
 
@@ -865,7 +867,8 @@ aiRouter.post('/query', async (c) => {
       return c.json({ error: 'Question is required' }, 400);
     }
 
-    const medicines = getAllMedicines();
+    const userId = c.get('userId');
+    const medicines = getAllMedicines(userId);
     const { todayStr, in30daysStr } = getDateBoundaries(expiringDays);
 
     if (medicines.length === 0) {

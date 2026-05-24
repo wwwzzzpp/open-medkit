@@ -6,7 +6,7 @@ import { authRouter } from './auth';
 import { authMiddleware } from '../middleware/auth';
 
 function createApp() {
-  const app = new Hono();
+  const app = new Hono<{ Variables: { userId: number } }>();
   app.route('/api/auth', authRouter);
   app.get('/api/health', (c) => c.json({ status: 'ok' }));
   app.use('/api/*', authMiddleware);

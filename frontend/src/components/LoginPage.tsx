@@ -1,20 +1,28 @@
 import { useState, type FormEvent } from 'react';
 import { Lock, ArrowRight } from 'lucide-react';
 
-import { login } from '../lib/api';
+import { login, register } from '../lib/api';
 
 interface LoginPageProps {
   onSuccess: () => void;
 }
 
 export function LoginPage({ onSuccess }: LoginPageProps) {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
+  const [isRegister, setIsRegister] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
+    if (!username.trim()) {
+      setError('请输入用户名');
+      triggerShake();
+      return;
+    }
 
     if (!password.trim()) {
       setError('请输入密码');
@@ -26,7 +34,12 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
     setError('');
 
     try {
-      await login(password);
+      if (isRegister) {
+        await register(username, password);
+        await login(username, password);
+      } else {
+        await login(username, password);
+      }
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
@@ -95,6 +108,23 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
             shaking ? 'animate-shake' : ''
           }`}
         >
+          <label className="block mb-4">
+            <span className="mb-2 block text-[13px] font-medium text-ink2">用户名</span>
+            <div className="group relative">
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (error) setError('');
+                }}
+                placeholder="请输入用户名"
+                autoFocus
+                className="theme-input w-full rounded-[12px] border border-border/60 bg-surface/50 py-3 px-4 text-[15px] outline-none transition-all placeholder:text-ink3/50 focus:border-accent focus:bg-surface focus:ring-4 focus:ring-accent/10 dark:bg-surface2/30"
+              />
+            </div>
+          </label>
+
           <label className="block">
             <span className="mb-2 block text-[13px] font-medium text-ink2">访问密码</span>
             <div className="group relative">
@@ -106,8 +136,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                   setPassword(e.target.value);
                   if (error) setError('');
                 }}
-                placeholder="输入密码以继续"
-                autoFocus
+                placeholder="输入密码"
                 className="theme-input w-full rounded-[12px] border border-border/60 bg-surface/50 py-3 pl-10 pr-4 text-[15px] outline-none transition-all placeholder:text-ink3/50 focus:border-accent focus:bg-surface focus:ring-4 focus:ring-accent/10 dark:bg-surface2/30"
               />
             </div>
@@ -122,16 +151,29 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
 
           <button
             type="submit"
-            disabled={loading || !password.trim()}
+            disabled={loading || !password.trim() || !username.trim()}
             className={`group mt-6 flex w-full items-center justify-center gap-2 rounded-[12px] bg-accent py-3 text-[14px] font-medium text-white transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 ${
-              !loading && password.trim() ? 'animate-softGlow' : ''
+              !loading && password.trim() && username.trim() ? 'animate-softGlow' : ''
             }`}
           >
-            {loading ? '验证中…' : '进入库存'}
+            {loading ? (isRegister ? '注册中…' : '验证中…') : (isRegister ? '注册并登录' : '进入库存')}
             {!loading && (
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             )}
           </button>
+          
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegister(!isRegister);
+                setError('');
+              }}
+              className="text-[13px] text-ink3 hover:text-accent transition-colors"
+            >
+              {isRegister ? '已有账号？去登录' : '没有账号？去注册'}
+            </button>
+          </div>
         </form>
 
         {/* Footer */}
