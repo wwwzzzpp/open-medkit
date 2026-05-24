@@ -146,6 +146,57 @@ npm run dev
 
 详细部署指南请参阅 **[部署文档](./DEPLOY.md)**。
 
+### 一键发布到阿里云新加坡服务器
+
+本项目已经提供面向 `bank-t.chuya.wang` / `43.119.88.83` 的一键发布脚本。脚本会在服务器上安装 Docker、配置 Nginx 反向代理、申请 HTTPS 证书、写入生产 `.env`，并把容器只绑定到服务器本机 `127.0.0.1:3000`，公网只开放 80/443。
+
+前置条件：
+
+- 阿里云安全组已放行 `22`、`80`、`443`
+- `bank-t.chuya.wang` 的 A 记录已指向 `43.119.88.83`
+- 本机可以通过 SSH 登录服务器：`ssh root@43.119.88.83`
+
+首次发布：
+
+```bash
+npm install
+git push origin codex/agrochemical-inventory-management
+AUTH_PASSWORD='换成你的访问密码' \
+AI_API_KEY='你的 DeepSeek API Key，可先留空' \
+npm run deploy:singapore
+```
+
+脚本会让服务器从 GitHub 拉取代码，所以本地改动需要先 push 到对应分支。默认发布当前 Git 分支，也可以通过 `BRANCH=...` 指定。
+
+如果不传 `AUTH_PASSWORD`，脚本会自动生成一个 20 位随机密码，并在发布完成后打印出来。
+
+脚本默认使用 DeepSeek：
+
+```env
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-chat
+```
+
+后续更新代码后，再运行同一个命令即可重新发布：
+
+```bash
+npm run deploy:singapore
+```
+
+常用覆盖项：
+
+```bash
+SERVER_HOST=43.119.88.83 \
+SERVER_USER=root \
+DOMAIN=bank-t.chuya.wang \
+BRANCH=codex/agrochemical-inventory-management \
+AUTH_PASSWORD='新的访问密码' \
+AI_API_KEY='sk-...' \
+npm run deploy:singapore
+```
+
+如果登录提示“密码错误”，直接用 `AUTH_PASSWORD='新的访问密码' npm run deploy:singapore` 重新发布一次，脚本会重新生成密码哈希并重启服务。
+
 **快速部署** — 任何能运行 Docker 的机器：
 
 ```bash
