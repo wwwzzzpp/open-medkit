@@ -109,15 +109,12 @@ export function getDb(): SqliteDatabase {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   const medicinesExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='medicines'").get();
-  if (medicinesExists) {
-    ensureSchemaMigrations(db);
-  }
   
+  // Create tables using schema (IF NOT EXISTS will skip existing old tables, but will create the new 'users' table)
   db.exec(schema);
   
-  if (!medicinesExists) {
-    ensureSchemaMigrations(db); // Create default user
-  }
+  // Migrate existing tables to add user_id, or seed the default user for new databases
+  ensureSchemaMigrations(db);
 
   backfillAgrochemicalCategories(db);
 
