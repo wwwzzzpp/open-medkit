@@ -111,24 +111,14 @@ install_packages() {
 }
 
 sync_code() {
-  if [ -d "$APP_DIR/.git" ]; then
-    cd "$APP_DIR"
-    git remote set-url origin "$REPO_URL"
-    git fetch origin "$BRANCH"
-    git checkout "$BRANCH"
-    git pull --ff-only origin "$BRANCH"
-  else
-    git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
-    cd "$APP_DIR"
-  fi
-
-  cat > docker-compose.prod.yml <<'EOF'
+  # We now use local rsync to upload code directly, bypassing GitHub throttling on the server.
+  mkdir -p "$APP_DIR"
+  cat > "$APP_DIR/docker-compose.prod.yml" <<'EOF'
 services:
   medkit:
     ports: !override
       - "127.0.0.1:${MEDKIT_PORT:-3000}:3000"
 EOF
-
   install -m 600 /tmp/open-medkit.env "$APP_DIR/.env"
   rm -f /tmp/open-medkit.env
 }
@@ -218,7 +208,11 @@ chmod +x "$TMP_DIR/deploy-remote.sh"
 echo "Uploading deployment files to $SERVER_USER@$SERVER_HOST..."
 scp "$TMP_DIR/open-medkit.env" "$TMP_DIR/deploy-remote.sh" "$SERVER_USER@$SERVER_HOST:/tmp/"
 
-echo "Deploying $REPO_URL#$BRANCH to $SERVER_HOST..."
+echo "Syncing local source code directly to server to bypass GitHub..."
+ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p $APP_DIR"
+rsync -avz --exclude '.git' --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude '.DS_Store' "$PWD/" "$SERVER_USER@$SERVER_HOST:$APP_DIR/"
+
+echo "Deploying to $SERVER_HOST..."
 ssh "$SERVER_USER@$SERVER_HOST" \
   "bash /tmp/deploy-remote.sh '$APP_DIR' '$REPO_URL' '$BRANCH' '$DOMAIN' '$ENABLE_HTTPS' '$SWAP_SIZE'"
 
