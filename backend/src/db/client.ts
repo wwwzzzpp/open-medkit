@@ -110,11 +110,21 @@ export function getDb(): SqliteDatabase {
   db.pragma('foreign_keys = ON');
   const medicinesExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='medicines'").get();
   
-  // Create tables using schema (IF NOT EXISTS will skip existing old tables, but will create the new 'users' table)
-  db.exec(schema);
+  // 1. Manually ensure `users` table exists first, so migration can query it.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      username      TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
   
-  // Migrate existing tables to add user_id, or seed the default user for new databases
+  // 2. Migrate existing tables to add user_id, or seed the default user for new databases
   ensureSchemaMigrations(db);
+
+  // 3. Now that all columns exist, execute the full schema to create indexes, triggers, and other tables
+  db.exec(schema);
 
   backfillAgrochemicalCategories(db);
 
