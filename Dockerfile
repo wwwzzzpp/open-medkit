@@ -1,7 +1,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-RUN apk add --no-cache python3 make g++
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json ./
 COPY backend/package.json ./backend/package.json
@@ -19,7 +20,8 @@ RUN npm run build
 FROM node:20-alpine AS prod-deps
 WORKDIR /app
 
-RUN apk add --no-cache python3 make g++
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json ./
 COPY backend/package.json ./backend/package.json
