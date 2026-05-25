@@ -109,22 +109,30 @@ export function getDb(): SqliteDatabase {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   const medicinesExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='medicines'").get();
-  
-  // 1. Manually ensure `users` table exists first, so migration can query it.
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      username      TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
-  
-  // 2. Migrate existing tables to add user_id, or seed the default user for new databases
-  ensureSchemaMigrations(db);
+  if (medicinesExists) {
+    // 1. Manually ensure `users` table exists first, so migration can query it.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        username      TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    
+    // 2. Migrate existing tables to add user_id, or seed the default user for new databases
+    ensureSchemaMigrations(db);
 
-  // 3. Now that all columns exist, execute the full schema to create indexes, triggers, and other tables
-  db.exec(schema);
+    // 3. Now that all columns exist, execute the full schema to create indexes, triggers, and other tables
+    db.exec(schema);
+  } else {
+    // Brand new database! Create everything at once.
+    db.exec(schema);
+    
+    // Seed the default admin user
+    const defaultPasswordHash = '$argon2id$v=19$m=65536,t=3,p=4$Gj6c+0eXh+sM2bA8hJvT/Q$XyD0/X0E5+xU0xO/w6z+BwQ2M2L8v6Z0/G5q3/1s2kQ';
+    db.prepare("INSERT INTO users (id, username, password_hash) VALUES (1, 'admin', ?)").run(defaultPasswordHash);
+  }
 
   backfillAgrochemicalCategories(db);
 
