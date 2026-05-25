@@ -4,7 +4,7 @@ set -euo pipefail
 SERVER_HOST="${SERVER_HOST:-39.106.26.99}"
 SERVER_USER="${SERVER_USER:-root}"
 DOMAIN="${DOMAIN:-wms.chuya.wang}"
-REPO_URL="${REPO_URL:-https://github.com/wwwzzzpp/open-medkit.git}"
+REPO_URL="${REPO_URL:-https://kkgithub.com/wwwzzzpp/open-medkit.git}"
 BRANCH="${BRANCH:-$(git branch --show-current 2>/dev/null || true)}"
 APP_DIR="${APP_DIR:-/opt/open-medkit}"
 MEDKIT_PORT="${MEDKIT_PORT:-3000}"
