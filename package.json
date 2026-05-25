@@ -11,7 +11,8 @@
     "start": "npm run start -w backend",
     "mcp": "npm run mcp -w backend",
     "test": "npm run test -w backend && npm run test -w frontend",
-    "deploy:singapore": "bash scripts/deploy-singapore.sh"
+    "deploy:singapore": "bash scripts/deploy-singapore.sh",
+    "deploy:production": "bash scripts/deploy-production.sh"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
